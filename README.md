@@ -3,6 +3,8 @@ Automated Trading System (ATS)
 
 This repository contains the Automated Trading System (ATS), a Python-based application designed to automate trading strategies using the Interactive Brokers (IB) platform. The system allows for the integration of multiple trading strategies, providing a GUI for easy interaction and control.
 
+![ATS](ATS.png)
+
 Project Structure
 
 The ATS project is organized into several modules:
