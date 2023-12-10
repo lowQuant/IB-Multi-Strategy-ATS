@@ -10,9 +10,10 @@ class Strategy:
     def run(self):
         add_log("Strategy2 Thread Started")
         start_event.wait()
-        add_log("Executing Strategy 2")
+        
         while start_event.is_set():
-            time.sleep(10)
+            add_log("Executing Strategy 2")
+            time.sleep(4)
             add_log("S2: Listening to market data")
 
     def stop(self):

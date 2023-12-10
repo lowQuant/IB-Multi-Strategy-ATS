@@ -10,10 +10,12 @@ class Strategy:
     def run(self):
         add_log("Strategy1 Thread Started")
         start_event.wait()
-        add_log("Executing Strategy 1")
+        
         while start_event.is_set():
+            add_log("Executing Strategy 1")
             time.sleep(1)
             add_log(f"S1: Buying 10 shares AAPL")
+            time.sleep(3)
 
     def stop(self):
         # Hier Logik zum Stoppen der Strategie hinzufügen

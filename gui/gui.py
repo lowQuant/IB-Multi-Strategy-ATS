@@ -5,9 +5,9 @@ from pathlib import Path
 from tkinter import Tk, Canvas, Entry, Text, Button, PhotoImage, Label
 
 # My imports
-from .utils import start_trading, stop_trading, exit_application, update_log_message
+from .utils import start_trading, stop_trading, exit_application, launch_jupyter
 from .log import log_buffer, log_lock, start_event
-
+from .settings_window import open_settings_window
 
 OUTPUT_PATH = Path(__file__).parent
 ASSETS_PATH = OUTPUT_PATH / "assets" / "frame0"
@@ -22,9 +22,7 @@ def update_gui_with_logs():
 def relative_to_assets(path: str) -> Path:
     return ASSETS_PATH / Path(path)
 
-print(relative_to_assets("image_1.png"))
 window = Tk()
-
 window.geometry("814x555")
 window.configure(bg = "#FFFFFF")
 
@@ -60,7 +58,7 @@ settings_btn_img = PhotoImage(
     file=relative_to_assets("settings.png"))
 settings_btn = Button(image=settings_btn_img,
     borderwidth=0,highlightthickness=0,
-    command=lambda: print("Settings clicked"),
+    command=lambda: open_settings_window(window),
     relief="flat"
 )
 settings_btn.place(x=589.0,y=144.0,width=201.0,height=71.0)
@@ -84,6 +82,12 @@ start_btn = Button(image=start_btn_img,
     relief="flat"
 )
 start_btn.place(x=48.0, y=79.0, width=178.0, height=58.0)
+
+research_text = canvas.create_text(35, 535, anchor="sw", text="Research", font=("InriaSans Regular", 20), fill="black")
+canvas.create_line(25, 537, 133, 537, fill="black", width=0.5)
+# Bind the click event to the text
+canvas.tag_bind(research_text, "<Button-1>", launch_jupyter)
+# exit_btn.place(x=622.0,y=489.0,width=178.0,height=58.0)
 
 # Bottom Screen Textbox - Advertisement
 canvas.create_text(330.0,534.0,anchor="nw",

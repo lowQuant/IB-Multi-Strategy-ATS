@@ -1,10 +1,11 @@
 # ATS/main.py
 from gui import run_gui
 from broker import connect_to_IB, disconnect_from_IB
-
+from data_and_research import ac
 
 def main():
     # Start the GUI without trying to connect to IB immediately
+    print(ac.list_libraries())
     run_gui()
 
 # def main():
