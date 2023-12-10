@@ -2,7 +2,7 @@
 
 An Automated Trading System (ATS) for managing and executing multiple trading strategies via Interactive Brokers (IB). This ATS leverages ib_insync for efficient and easy trading with IB, and uses ArcticDB for robust and scalable storage of strategy cash flow and P&L data.
 
-Features
+#### Features
 
 Multiple Strategy Management: Seamlessly run multiple trading strategies simultaneously.
 Interactive Brokers Integration: Utilize ib_insync for an intuitive and powerful connection with IB's trading capabilities.
