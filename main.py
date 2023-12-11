@@ -5,7 +5,7 @@ from data_and_research import ac
 
 def main():
     # Start the GUI without trying to connect to IB immediately
-    print(ac.list_libraries())
+    # print(ac.list_libraries())
     run_gui()
 
 # def main():

@@ -41,7 +41,7 @@ image_1 = canvas.create_image(
 
 canvas.create_text(269.0,15.0,anchor="nw",text="Automated Trading System",fill="#000000",font=("InriaSans Regular", 24 * -1))
 
-log_text = canvas.create_text(79, 214,anchor="nw",text="",fill="#000000",font=("InriaSans Regular", 14),width=500)
+log_text = canvas.create_text(79, 214,anchor="nw",text="",fill="#000000",font=("InriaSans Regular", 10),width=500)
 
 # Exit Button
 exit_btn_img = PhotoImage(
@@ -83,11 +83,18 @@ start_btn = Button(image=start_btn_img,
 )
 start_btn.place(x=48.0, y=79.0, width=178.0, height=58.0)
 
-research_text = canvas.create_text(35, 535, anchor="sw", text="Research", font=("InriaSans Regular", 20), fill="black")
-canvas.create_line(25, 537, 133, 537, fill="black", width=0.5)
-# Bind the click event to the text
-canvas.tag_bind(research_text, "<Button-1>", launch_jupyter)
-# exit_btn.place(x=622.0,y=489.0,width=178.0,height=58.0)
+research_btn_img = PhotoImage(file=relative_to_assets("research.png"))
+research_btn = Button(image=research_btn_img,
+    borderwidth=0,highlightthickness=0,
+    command=lambda: launch_jupyter(),
+    relief="flat")
+research_btn.place(x=16.0,y=506.0,width=181.0,height=36.0)
+
+# research_text = canvas.create_text(35, 535, anchor="sw", text="Research", font=("InriaSans Regular", 20), fill="black")
+# canvas.create_line(25, 537, 133, 537, fill="black", width=0.5)
+# # Bind the click event to the text
+# canvas.tag_bind(research_text, "<Button-1>", launch_jupyter)
+# # exit_btn.place(x=622.0,y=489.0,width=178.0,height=58.0)
 
 # Bottom Screen Textbox - Advertisement
 canvas.create_text(330.0,534.0,anchor="nw",
