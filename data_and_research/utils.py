@@ -4,12 +4,12 @@ import pandas as pd
 from datetime import datetime
 from arcticdb import Arctic, QueryBuilder
 
-
 def initialize_db(db_path):
     global ac
     ac_local = Arctic(f'lmdb://{db_path}?map_size=200MB')
-
+    
     if not "settings" in ac_local.list_libraries():
+        print("Creating settings a new settings table")
         library = ac_local.get_library('settings', create_if_missing=True)
         index_values = ['port', 
                         's3_db_management', # False for local
@@ -31,7 +31,7 @@ def initialize_db(db_path):
     else: # read local settings if settings table exists
         library = ac_local.get_library('settings', create_if_missing=True)
         settings_df = library.read("settings").data
-
+        
         # if S3 is set, change ac from local to s3
         if settings_df.loc["s3_db_management","Value"] == str(True):
             region = settings_df.loc["region","Value"]
@@ -46,7 +46,8 @@ def initialize_db(db_path):
                 lib = ac.get_library('settings', create_if_missing=True)
                 # copy settings from local ac
                 lib.write("settings", settings_df)
-
+        else:
+            ac = ac_local
         return ac
 
 ac = initialize_db("data_and_research/db")
