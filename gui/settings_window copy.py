@@ -1,5 +1,5 @@
 from tkinter import Toplevel, ttk, Frame, Label, Text, Entry, Button, Checkbutton, IntVar, messagebox, Toplevel, StringVar
-import time
+import pyperclip
 import pandas as pd
 from data_and_research import ac, fetch_strategies, fetch_strategy_params
 
@@ -189,6 +189,7 @@ def exit_settings(settings_window):
     else:
         settings_window.master.destroy()
 
+
 def populate_strategies_tab(tab_frame, tab_control):
     sub_tab_control = ttk.Notebook(tab_frame)
     overview_tab = Frame(sub_tab_control)
@@ -202,11 +203,6 @@ def populate_strategies_tab(tab_frame, tab_control):
     populate_overview_tab(overview_tab, tab_control)
     populate_details_tab(details_tab)
 
-# Function to update the overview tab
-def update_overview_tab(tab_frame):
-    for widget in tab_frame.winfo_children():
-        widget.destroy()
-    populate_overview_tab(tab_frame, tab_frame.master)
 
 def populate_overview_tab(tab_frame, tab_control):
     strategies, df = fetch_strategies()  # Assuming this returns a list of strategy names and a DataFrame
@@ -229,6 +225,7 @@ def populate_overview_tab(tab_frame, tab_control):
         Label(tab_frame, text="No Strategies found in the database. Please add a new Strategy.").grid(row=1, column=0, columnspan=3, sticky='w', padx=10, pady=5)
         # Add Strategy Button
         Button(tab_frame, text="Add a Strategy", command=lambda: add_strategy_window(tab_frame)).grid(row=98, column=0, columnspan=3, pady=10, padx=10)
+
 
 def add_strategy_window(tab_frame):
     new_window = Toplevel()
@@ -303,7 +300,6 @@ def add_strategy_window(tab_frame):
             messagebox.showerror("Error", f"Failed to save settings: {e}")
 
         # ...
-        update_overview_tab(tab_frame)  # Refresh the overview tab after saving
         new_window.destroy()
 
     # Exit Button
@@ -315,9 +311,8 @@ def populate_details_tab(tab_frame):
     strategies, _ = fetch_strategies()
 
     selected_strategy = StringVar()
-    Label(tab_frame, text='''Select a Strategy to see Strategy Parameters''').grid(row=0, column=0, columnspan=2, padx=5, pady=5)
     strategy_dropdown = ttk.Combobox(tab_frame, textvariable=selected_strategy, values=strategies)
-    strategy_dropdown.grid(row=1, column=0, padx=10, pady=5)
+    strategy_dropdown.grid(row=0, column=0, padx=5, pady=5)
 
     strategy_details_frame = Frame(tab_frame)
     strategy_details_frame.grid(row=1, column=0, padx=5, pady=5)

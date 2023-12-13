@@ -90,12 +90,6 @@ research_btn = Button(image=research_btn_img,
     relief="flat")
 research_btn.place(x=16.0,y=506.0,width=181.0,height=36.0)
 
-# research_text = canvas.create_text(35, 535, anchor="sw", text="Research", font=("InriaSans Regular", 20), fill="black")
-# canvas.create_line(25, 537, 133, 537, fill="black", width=0.5)
-# # Bind the click event to the text
-# canvas.tag_bind(research_text, "<Button-1>", launch_jupyter)
-# # exit_btn.place(x=622.0,y=489.0,width=178.0,height=58.0)
-
 # Bottom Screen Textbox - Advertisement
 canvas.create_text(330.0,534.0,anchor="nw",
     text="www.lange-invest.com",

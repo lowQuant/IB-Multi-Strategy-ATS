@@ -51,3 +51,18 @@ def initialize_db(db_path):
         return ac
 
 ac = initialize_db("data_and_research/db")
+
+def fetch_strategies():
+    lib = ac.get_library('strategies', create_if_missing=True)
+    if lib.has_symbol("strategies"):
+        strat_df = lib.read("strategies").data
+        print("strat df:", strat_df)
+        strategies = strat_df.index.to_list()
+        print("strategies:" , strategies)
+    else:
+        strategies = []
+        strat_df = pd.DataFrame()
+    return strategies, strat_df
+
+def fetch_strategy_params(strategy_name):
+    pass

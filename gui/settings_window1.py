@@ -1,5 +1,5 @@
 from tkinter import Toplevel, ttk, Frame, Label, Text, Entry, Button, Checkbutton, IntVar, messagebox, Toplevel, StringVar
-import time
+import pyperclip
 import pandas as pd
 from data_and_research import ac, fetch_strategies, fetch_strategy_params
 
@@ -58,7 +58,6 @@ def populate_general_tab(tab_frame, tab_control):
     
     Label(tab_frame, text="Use S3 if ATS will run on multiple computers").grid(row=3, column=0, columnspan=2, sticky='w', padx=10, pady=0)
 
-    
     # AWS S3 Credentials
     aws_access_id_entry = Entry(tab_frame)
     aws_access_key_entry = Entry(tab_frame)
@@ -137,6 +136,14 @@ def toggle_tws_auto_start(check_var, username_entry, password_entry):
         username_entry.config(state='disabled')
         password_entry.config(state='disabled')
 
+def toggle_tws_auto_start(check_var, username_entry, password_entry):
+    if check_var.get() == 1:
+        username_entry.config(state='normal')
+        password_entry.config(state='normal')
+    else:
+        username_entry.config(state='disabled')
+        password_entry.config(state='disabled')
+
 def save_general_settings(port, db_local, db_s3, aws_access_id, aws_access_key, aws_bucket_name, aws_region, tws_auto_start, username, password):
     global changes_made
 
@@ -202,12 +209,6 @@ def populate_strategies_tab(tab_frame, tab_control):
     populate_overview_tab(overview_tab, tab_control)
     populate_details_tab(details_tab)
 
-# Function to update the overview tab
-def update_overview_tab(tab_frame):
-    for widget in tab_frame.winfo_children():
-        widget.destroy()
-    populate_overview_tab(tab_frame, tab_frame.master)
-
 def populate_overview_tab(tab_frame, tab_control):
     strategies, df = fetch_strategies()  # Assuming this returns a list of strategy names and a DataFrame
 
@@ -215,25 +216,21 @@ def populate_overview_tab(tab_frame, tab_control):
         # Display the existing strategies in a table format
         Label(tab_frame, text="Symbol", font=("bold")).grid(row=0, column=0, padx=5, pady=5)
         Label(tab_frame, text="Name", font=("bold")).grid(row=0, column=1, padx=5, pady=5)
-        Label(tab_frame, text="Filename", font=("bold")).grid(row=0, column=2, padx=5, pady=5)
-        Label(tab_frame, text="Target Weight", font=("bold")).grid(row=0, column=3, padx=5, pady=5)
+        Label(tab_frame, text="Target Weight", font=("bold")).grid(row=0, column=2, padx=5, pady=5)
 
         for index, strategy in enumerate(strategies):
             Label(tab_frame, text=strategy).grid(row=index + 1, column=0, padx=5, pady=5)
             Label(tab_frame, text=df.loc[strategy, 'name']).grid(row=index + 1, column=1, padx=5, pady=5)
-            Label(tab_frame, text=df.loc[strategy, 'filename']).grid(row=index + 1, column=2, padx=5, pady=5)
-            Label(tab_frame, text=df.loc[strategy, 'target_weight']).grid(row=index + 1, column=3, padx=5, pady=5)
-        
-        Button(tab_frame, text="Add another Strategy", command=lambda: add_strategy_window(tab_frame)).grid(row=98, column=0, columnspan=3, pady=10, padx=10)
+            Label(tab_frame, text=df.loc[strategy, 'target_weight']).grid(row=index + 1, column=2, padx=5, pady=5)
     else:
         Label(tab_frame, text="No Strategies found in the database. Please add a new Strategy.").grid(row=1, column=0, columnspan=3, sticky='w', padx=10, pady=5)
-        # Add Strategy Button
-        Button(tab_frame, text="Add a Strategy", command=lambda: add_strategy_window(tab_frame)).grid(row=98, column=0, columnspan=3, pady=10, padx=10)
 
-def add_strategy_window(tab_frame):
+    Button(tab_frame, text="Add a Strategy", command=lambda: add_strategy_window(tab_frame, tab_control)).grid(row=98, column=0, columnspan=3, pady=10, padx=10)
+
+def add_strategy_window(tab_frame, tab_control):
     new_window = Toplevel()
     new_window.title("Add Strategy")
-    new_window.geometry("380x350")
+    new_window.geometry("380x360")
     new_window.transient(tab_frame)  # Set the new window to be a child of tab_frame
     new_window.grab_set()  # Set the new window to be modal
 
@@ -261,13 +258,13 @@ def add_strategy_window(tab_frame):
     Label(new_window, text="Minimun Weight:").grid(row=5, column=0, padx=5, pady=5)
     min_weight_entry = Entry(new_window)
     min_weight_entry.grid(row=5, column=1, padx=5, pady=5)
-    # min_weight_entry.insert(0,weight_entry.get()*0.8)
+    # min_weight_entry.insert(0,int(weight_entry.get())*0.8)
 
     # Max Weight
     Label(new_window, text="Maximum Weight:").grid(row=6, column=0, padx=5, pady=5)
     max_weight_entry = Entry(new_window)
     max_weight_entry.grid(row=6, column=1, padx=5, pady=5)
-    # max_weight_entry.insert(0,weight_entry.get()*1.2)
+    # max_weight_entry.insert(0,int(weight_entry.get())*1.2)
 
     # Filename
     Label(new_window, text="Filename:").grid(row=7, column=0, padx=10, pady=5)
@@ -278,32 +275,31 @@ def add_strategy_window(tab_frame):
     # Function to save the strategy details and close the window
     def save_and_exit():
         # Saving Strategy Details
-        # Creating a dictionary of strategy details
+    # Creating a dictionary of strategy details
         details_dict = {
-            "name": name_entry.get(),
-            "filename": file_entry.get(),
-            "description": description_text.get('1.0', 'end-1c'),
-            "target_weight": weight_entry.get(),
-            'min_weight': min_weight_entry.get(),
-            'max_weight': max_weight_entry.get(),
-            'params': ""
+            "name": [name_entry.get()],
+            "filename": [file_entry.get()],
+            "description": [description_text.get('1.0', 'end-1c')],
+            "target_weight": [weight_entry.get()],
+            'min_weight': [min_weight_entry.get()],
+            'max_weight': [max_weight_entry.get()],
+            'params': [""]
         }
 
         # Convert dictionary to DataFrame
-        details_df = pd.DataFrame([details_dict], index=[symbol_entry.get()])
-        # details_df = pd.DataFrame.from_dict(details_dict, orient='index', columns=['Value'])
+        details_df = pd.DataFrame.from_dict(details_dict)
+        details_df.index = [symbol_entry.get()]  # Set symbol as the index
 
         # Write settings to Arctic
         try:
             lib = ac.get_library('strategies', create_if_missing=True)
-            lib.append(f"strategies", details_df)#, metadata={'source': 'gui'})
+            lib.write(f"strategies", details_df, metadata={'source': 'gui'})
             messagebox.showinfo("Success", f"{name_entry.get()} saved successfully.")
             
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save settings: {e}")
 
         # ...
-        update_overview_tab(tab_frame)  # Refresh the overview tab after saving
         new_window.destroy()
 
     # Exit Button
@@ -315,9 +311,8 @@ def populate_details_tab(tab_frame):
     strategies, _ = fetch_strategies()
 
     selected_strategy = StringVar()
-    Label(tab_frame, text='''Select a Strategy to see Strategy Parameters''').grid(row=0, column=0, columnspan=2, padx=5, pady=5)
     strategy_dropdown = ttk.Combobox(tab_frame, textvariable=selected_strategy, values=strategies)
-    strategy_dropdown.grid(row=1, column=0, padx=10, pady=5)
+    strategy_dropdown.grid(row=0, column=0, padx=5, pady=5)
 
     strategy_details_frame = Frame(tab_frame)
     strategy_details_frame.grid(row=1, column=0, padx=5, pady=5)
