@@ -6,7 +6,7 @@ from data_and_research import ac, fetch_strategies, fetch_strategy_params
 changes_made = False
 
 def get_settings_from_db():
-    lib = ac.get_library("settings")
+    lib = ac.get_library("general")
     df = lib.read("settings").data
     settings_dict = df.to_dict()
     return settings_dict['Value']
@@ -15,7 +15,7 @@ def open_settings_window(main_window):
     
     settings_window = Toplevel(main_window)
     settings_window.title("Settings")
-    settings_window.geometry("407x555")
+    settings_window.geometry("480x585")
 
     tab_control = ttk.Notebook(settings_window)
     general_tab = Frame(tab_control)
@@ -170,7 +170,7 @@ def save_general_settings(port, db_local, db_s3, aws_access_id, aws_access_key, 
 
     # Write settings to Arctic
     try:
-        lib = ac.get_library("settings")
+        lib = ac.get_library("general")
         lib.write("settings", settings_df, metadata={'source': 'gui'})
         messagebox.showinfo("Success", "Settings saved successfully.")
         changes_made = False
@@ -179,7 +179,6 @@ def save_general_settings(port, db_local, db_s3, aws_access_id, aws_access_key, 
     # Reset changes_made only if save is successful
     changes_made = False
     # messagebox.showinfo("Success", "Settings saved successfully.")
-
 
 def exit_settings(settings_window):
     global changes_made
@@ -226,14 +225,16 @@ def populate_overview_tab(tab_frame, tab_control):
         
         Button(tab_frame, text="Add another Strategy", command=lambda: add_strategy_window(tab_frame)).grid(row=98, column=0, columnspan=3, pady=10, padx=10)
     else:
-        Label(tab_frame, text="No Strategies found in the database. Please add a new Strategy.").grid(row=1, column=0, columnspan=3, sticky='w', padx=10, pady=5)
+        Label(tab_frame, text="""
+              No Strategies found in the database. 
+              Please add a new Strategy.""").grid(row=1, column=0, rowspan=2, columnspan=3, sticky='w', padx=0, pady=5)
         # Add Strategy Button
         Button(tab_frame, text="Add a Strategy", command=lambda: add_strategy_window(tab_frame)).grid(row=98, column=0, columnspan=3, pady=10, padx=10)
 
 def add_strategy_window(tab_frame):
     new_window = Toplevel()
     new_window.title("Add Strategy")
-    new_window.geometry("380x350")
+    new_window.geometry("360x400")
     new_window.transient(tab_frame)  # Set the new window to be a child of tab_frame
     new_window.grab_set()  # Set the new window to be modal
 
@@ -295,7 +296,7 @@ def add_strategy_window(tab_frame):
 
         # Write settings to Arctic
         try:
-            lib = ac.get_library('strategies', create_if_missing=True)
+            lib = ac.get_library('general', create_if_missing=True)
             lib.append(f"strategies", details_df)#, metadata={'source': 'gui'})
             messagebox.showinfo("Success", f"{name_entry.get()} saved successfully.")
             

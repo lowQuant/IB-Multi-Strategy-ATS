@@ -6,11 +6,11 @@ from arcticdb import Arctic, QueryBuilder
 
 def initialize_db(db_path):
     global ac
-    ac_local = Arctic(f'lmdb://{db_path}?map_size=200MB')
+    ac_local = Arctic(f'lmdb://{db_path}?map_size=5MB')
     
-    if not "settings" in ac_local.list_libraries():
-        print("Creating settings a new settings table")
-        library = ac_local.get_library('settings', create_if_missing=True)
+    if not "general" in ac_local.list_libraries():
+        print("Creating library 'general' where *settings and *strategies will be stored")
+        library = ac_local.get_library('general', create_if_missing=True)
         index_values = ['port', 
                         's3_db_management', # False for local
                         'aws_access_id', 'aws_access_key',
@@ -29,7 +29,7 @@ def initialize_db(db_path):
         return ac
     
     else: # read local settings if settings table exists
-        library = ac_local.get_library('settings', create_if_missing=True)
+        library = ac_local.get_library('general', create_if_missing=True)
         settings_df = library.read("settings").data
         
         # if S3 is set, change ac from local to s3
@@ -42,8 +42,8 @@ def initialize_db(db_path):
             ac =Arctic(f's3://s3.{region}.amazonaws.com:{bucket_name}?region={region}&access={id}&secret={key}')
 
             # check if "settings" exists in s3 ac
-            if not "settings" in ac.list_libraries():
-                lib = ac.get_library('settings', create_if_missing=True)
+            if not "general" in ac.list_libraries():
+                lib = ac.get_library('general', create_if_missing=True)
                 # copy settings from local ac
                 lib.write("settings", settings_df)
         else:
@@ -53,12 +53,12 @@ def initialize_db(db_path):
 ac = initialize_db("data_and_research/db")
 
 def fetch_strategies():
-    lib = ac.get_library('strategies', create_if_missing=True)
+    lib = ac.get_library('general', create_if_missing=True)
     if lib.has_symbol("strategies"):
         strat_df = lib.read("strategies").data
-        print("strat df:", strat_df)
+        # print("strat df:", strat_df)
         strategies = strat_df.index.to_list()
-        print("strategies:" , strategies)
+        # print("strategies:" , strategies)
     else:
         strategies = []
         strat_df = pd.DataFrame()
