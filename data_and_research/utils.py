@@ -56,9 +56,9 @@ def fetch_strategies():
     lib = ac.get_library('general', create_if_missing=True)
     if lib.has_symbol("strategies"):
         strat_df = lib.read("strategies").data
-        # print("strat df:", strat_df)
+        print("strat df:", strat_df)
         strategies = strat_df.index.to_list()
-        # print("strategies:" , strategies)
+        print("strategies:" , strategies)
     else:
         strategies = []
         strat_df = pd.DataFrame()

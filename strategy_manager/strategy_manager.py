@@ -3,6 +3,7 @@
 import importlib.util
 import os
 import threading
+from data_and_research.utils import fetch_strategies
 
 
 class StrategyManager:
@@ -14,7 +15,10 @@ class StrategyManager:
 
     def load_strategies(self):
         strategy_dir = "strategy_manager/strategies"
-        strategy_files = [f for f in os.listdir(strategy_dir) if f.endswith('.py') and not f.startswith('__')]
+        strategy_names, self.strategy_df = fetch_strategies()
+        # strategy_files = [f"{strategy}.py" for strategy in strategy_names if f"{strategy}.py" in os.listdir(strategy_dir)]
+        strategy_files = [f for f in self.strategy_df['filename'] if f in os.listdir(strategy_dir)]
+        print([f for f in self.strategy_df['filename']])
         print("Found strategy files:", strategy_files)
 
         for file in strategy_files:
@@ -36,23 +40,18 @@ class StrategyManager:
             except Exception as e:
                 print(f"Error loading strategy {module_name}: {e}")
 
-        print("Loaded strategies:", self.strategies)
-
-        # strategies = [f[:-3] for f in os.listdir("strategy_manager/strategies") if f.endswith('.py') and 'strategy' in f]
-        # for strategy_name in strategies:
-        #     strategy_module = load_strategy(strategy_name)
-        #     if strategy_module and hasattr(strategy_module, 'run'):
-        #         t = threading.Thread(target=strategy_module.run) #,args=(ib_client, start_event,))
-        #         t.daemon = True
-        #         t.start()
-        #         strategy_threads.append(t)
+        print("Loaded strategies:", [type(s).__name__ for s in self.strategies])
 
     def start_all(self):
         for strategy in self.strategies:
-            thread = threading.Thread(target=strategy.run)
-            thread.daemon = True
-            thread.start()
-            self.strategy_threads.append(thread)
+            if hasattr(strategy, 'run'):
+                thread = threading.Thread(target=strategy.run)
+                thread.daemon = True
+                thread.start()
+                self.strategy_threads.append(thread)
+            else:
+                print(f"Strategy {type(strategy).__name__} does not have a run method.")
+
 
     def stop_all(self):
         # Implement logic to gracefully stop all strategies

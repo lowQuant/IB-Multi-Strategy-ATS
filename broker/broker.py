@@ -2,18 +2,9 @@
 from collections import deque
 from ib_insync import *
 import threading, time
-
-# Initialize the log buffer and lock
-log_buffer = deque(maxlen=5)
-log_lock = threading.Lock()
-start_event = threading.Event()
+from gui.log import add_log, start_event
 
 ib = None  # Global variable for the IB client
-
-def add_log(message):
-    with log_lock:
-        log_buffer.append(f"{time.ctime()}: {message}")
-        print(message)  # For debugging, print to console as well.
 
 def connect_to_IB(port=7497):
     global ib

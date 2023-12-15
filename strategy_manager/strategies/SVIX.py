@@ -8,11 +8,11 @@ class Strategy:
         self.ib = ib_client
 
     def run(self):
-        add_log("Strategy1 Thread Started")
+        add_log("Strategy SVIX Thread Started")
         start_event.wait()
         
         while start_event.is_set():
-            add_log("Executing Strategy 1")
+            add_log("Executing Strategy SVXY")
             time.sleep(1)
             add_log(f"S1: Buying 10 shares AAPL")
             time.sleep(3)
