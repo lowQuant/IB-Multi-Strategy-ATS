@@ -13,13 +13,13 @@ class VRP:
    
         # Get Data on Strategy Initialization
         self.term_structure = self.get_vxm_term_structure()
- 
+        
         # Equity & Cash Management
         self.equity = sum(float(entry.value) for entry in self.ib.accountSummary() if entry.tag == "EquityWithLoanValue")
         self.cash = sum(float(entry.value) for entry in self.ib.accountSummary() if entry.tag == "AvailableFunds")
  
         # Position Management
-        self.current_weight = self.check_investment_weight(symbol="VXM")
+        self.current_weight = self.check_investment_weight(self,symbol="VXM")
         self.invested = bool(self.current_weight)
         self.min_weight, self.target_weight, self.max_weight = 0.04, 0.07, 0.1
         # self.target_weight, self.min_weight, self.max_weight = hp.get_allocation_allowance(self.strategy_symbol)
@@ -61,6 +61,7 @@ class VRP:
    
         self.vrp_df = spx_df.merge(vix_df, left_index=True, right_index=True, how='inner')
         self.vrp_df ['VRP'] = self.vrp_df ['VIX'].shift(21) - self.vrp_df ['Realised Volatility']
+        print("Latest Volatility Risk Premium",self.vrp_df.tail())
         return self.vrp_df
  
     def get_vxm_term_structure(self):
@@ -82,7 +83,14 @@ class VRP:
         # Get the spot rate from your function
         spot_rate_df = self.download_vix_and_spy_data()
         spot_rate = spot_rate_df['VIX'].iloc[-1]  # Latest VIX spot rate
- 
+        print("Current Spot Rate:",spot_rate)
+
+        # Append the data to the dictionary
+        futures_data['Contract'].append("VIX Index")
+        futures_data['LastPrice'].append(spot_rate)
+        futures_data['DTE'].append(0)
+        futures_data['AnnualizedYield'].append(None)
+        
         for i in range(9):  # Next 9 maturities
             # Calculate the contract month
             month = (today.month + i - 1) % 12 + 1
@@ -97,15 +105,21 @@ class VRP:
                 market_data = self.ib.reqMktData(fut[0])
                 self.ib.sleep(1)  # Wait for the data to be fetched
                 last_price = market_data.last
- 
+                print(f"{fut}: {last_price}")
                 # Ensure that we have valid market data
                 if last_price is not None:
                     # Calculate days until expiration
                     expiration_date = datetime.datetime.strptime(fut[0].lastTradeDateOrContractMonth, '%Y%m%d')
                     dte = (expiration_date - today).days
- 
-                    # Calculate annualized yield
-                    annualized_yield = ((spot_rate / last_price) - 1) * (365 / dte)
+
+                    if dte==0:
+                        annualized_yield = None
+                    else:
+                        # Calculate annualized yield
+                        if last_price >= spot_rate:
+                            annualized_yield =((spot_rate / last_price) ** (365 / dte) - 1)
+                        else:
+                            annualized_yield = ((last_price  / spot_rate) ** (365 / dte) - 1)
  
                     # Append the data to the dictionary
                     futures_data['Contract'].append(fut[0].localSymbol)
