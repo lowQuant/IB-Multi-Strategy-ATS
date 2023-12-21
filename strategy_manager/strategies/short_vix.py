@@ -85,7 +85,7 @@ class VRP:
         spot_rate = spot_rate_df['VIX'].iloc[-1]  # Latest VIX spot rate
         print("Current Spot Rate:",spot_rate)
 
-        # Append the data to the dictionary
+        # Add the Spot VIX to the dataframe
         futures_data['Contract'].append("VIX Index")
         futures_data['LastPrice'].append(spot_rate)
         futures_data['DTE'].append(0)
@@ -157,39 +157,25 @@ class VRP:
  
     def choose_future_to_short(self):
         """
-        Determine which VIX future to short based on the annualized yield and specific criteria.
- 
-        Working with:
-        self.term_structure (DataFrame): DataFrame containing futures contract data.
- 
-        Returns:
-        str: The contract to short.
+        Determine which VIX future to short based on the highest yield for futures with a price above 16.
         """
- 
-        # Sort the DataFrame by the absolute value of AnnualizedYield in ascending order
-        self.term_structure['AbsYield'] = self.term_structure['AnnualizedYield'].abs()
-        sorted_futures = self.term_structure.sort_values(by='AbsYield')
- 
-        # Iterate through the sorted DataFrame
-        for i in range(len(sorted_futures) - 1):
-            current_future = sorted_futures.iloc[i]
-            next_future = sorted_futures.iloc[i + 1]
- 
-            # Check if current future yield is equal to or slightly greater than the next
-            # and if the current price is below 16
-            if current_future['AbsYield'] >= next_future['AbsYield'] * 0.98 and current_future['LastPrice'] < 16:
-                # Choose the next month's future
-                return next_future['Contract']
- 
-        # If no future meets the criteria, choose the one with the lowest absolute yield
-        return sorted_futures.iloc[0]['Contract']
+
+        # Filter out futures with prices below 16
+        filtered_futures = self.term_structure[self.term_structure['LastPrice'] > 16]
+
+        # Sort the filtered futures by AnnualizedYield in ascending order (most negative first)
+        sorted_futures = filtered_futures.sort_values(by='AnnualizedYield')
+
+        # Select the future with the highest (most negative) yield
+        chosen_future = sorted_futures.iloc[0]['Contract'] if not sorted_futures.empty else None
+
+        return chosen_future
+
  
     def check_conditions_and_trade(self):
             """ Check the trading conditions and execute trades """
  
             if not self.invested:
- 
-
                 if self.vrp_df["VRP"].iloc[-1] > 0:
                     # Determine optimal Future to short
                     symbol_to_short  = self.choose_future_to_short()
