@@ -10,6 +10,7 @@ class VRP:
         self.ib = ib
         self.SPY_yfTicker = "^GSPC"
         self.VIX_yfTicker = "^VIX"
+        self.instrument_symbol = "VXM"
    
         # Get Data on Strategy Initialization
         self.term_structure = self.get_vxm_term_structure()
@@ -172,42 +173,41 @@ class VRP:
         return chosen_future
 
  
-    def check_conditions_and_trade(self):
-            """ Check the trading conditions and execute trades """
- 
-            if not self.invested:
-                if self.vrp_df["VRP"].iloc[-1] > 0:
-                    # Determine optimal Future to short
-                    symbol_to_short  = self.choose_future_to_short()
-                    contract_to_short = self.ib.qualifyContracts(Future(symbol=symbol_to_short))
-                    # Determine the number of contracts based on target weight
-                    contract_price = self.term_structure.loc[self.term_structure['Contract'] == symbol_to_short, 'LastPrice'].iloc[0]
-                    number_of_contracts = self.calculate_number_of_contracts(self.equity * self.target_weight, contract_price, contract_size=100)
- 
-                    # Execute short trade (simplified version)
-                    order = MarketOrder('SELL', number_of_contracts)
-                    trade = self.ib.placeOrder(contract_to_short, order)
-                    self.ib.sleep(1)  # Wait for the trade to be executed
- 
-                    print(f"Shorted {number_of_contracts} contracts of {symbol_to_short}")
- 
-            # Manage position if already invested
-            else:
-                # Check if current weight is within the specified range
-                if abs(self.min_weight) < abs(self.current_weight) < abs(self.max_weight):
-                    print(f"VRP is {self.current_weight*100}% invested. Consider rebalancing.")
- 
-                    # Add logic for rebalancing or rolling the position
- 
-                # Reduce position if it exceeds the max weight
-                elif self.current_weight > self.max_weight:
-                    # Add logic to reduce position
- 
-                    print("Reducing position to align with max weight.")
- 
-                # Increase position if it's below the min weight
-                elif self.current_weight < self.min_weight:
-                    # Add logic to increase position
- 
-                    print("Increasing position to align with min weight.")
-   
+def check_conditions_and_trade(self):
+    """ Check the trading conditions and execute trades """
+
+    # Determine optimal Future to short
+    symbol_to_short = self.choose_future_to_short()
+    contract_to_short = self.ib.qualifyContracts(Future(localSymbol=symbol_to_short))
+
+    if not self.invested:
+        if self.vrp_df["VRP"].iloc[-1] > 0:
+            self.short_future(contract_to_short)
+    else:
+        # 
+        current_contract = self.get_invested_contract()
+        if current_contract != contract_to_short:
+            self.roll_future(current_contract, contract_to_short)
+
+def short_future(self, contract):
+    """ Short a future contract """
+    # Code for shorting a future...
+
+def get_invested_contract(self):
+    """ Get the current future contract in the portfolio """
+    self.inv_contract = [pos.contract for pos in self.ib.portfolio() if pos.contract.symbol==self.instrument_symbol][0]
+    return self.inv_contract
+
+def get_contract_price(self,contract):
+    market_data = self.ib.reqMktData(contract)
+    self.ib.sleep(1)  # Wait for the data to be fetched
+    last_price = market_data.last
+
+def roll_future(self, current_contract, new_contract):
+    """ Roll the future contract """
+    self.close_position(current_contract)
+    self.short_future(new_contract)
+
+def close_position(self, contract):
+    """ Close the position in the given future contract """
+    # Code for closing the position...

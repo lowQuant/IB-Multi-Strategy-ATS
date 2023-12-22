@@ -51,14 +51,6 @@ class StrategyManager:
 
             print("Loaded strategies:", [type(s).__name__ for s in self.strategies])
 
-    # def start_all(self):
-    #     loop = asyncio.get_event_loop()
-    #     for strategy in self.strategies:
-    #         if hasattr(strategy, 'run'):
-    #             add_log(f"Starting strategy: {type(strategy).__name__}")
-    #             loop.create_task(strategy.run())  # Schedule the coroutine to be run on the event loop
-    #             add_log(f"Started strategy task: {type(strategy).__name__}")
-
     def start_all(self):
         for strategy in self.strategies:
             if hasattr(strategy, 'run'):

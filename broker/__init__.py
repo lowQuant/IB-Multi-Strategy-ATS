@@ -1,3 +1,4 @@
 # broker/__init__.py
 
-from .broker import connect_to_IB, disconnect_from_IB
+from .connection import connect_to_IB, disconnect_from_IB
+from .trade import *
