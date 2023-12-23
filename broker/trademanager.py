@@ -44,35 +44,64 @@ class TradeManager:
         self.ib.sleep(1)
         return trade
 
-    def roll_future(self, current_contract, new_contract, quantity, orderRef=""):
-            """
+    # def roll_future(self, current_contract, new_contract, quantity, orderRef=""):
+    #         """
+    #         Roll a futures contract by closing the current contract and opening a new one.
+
+    #         :param current_contract: The current ib_insync.Contract to be closed.
+    #         :param new_contract: The new ib_insync.Contract to be opened.
+    #         :param quantity: The quantity to roll. Positive for long positions, negative for short.
+    #         :param orderRef: Reference identifier for the order.
+    #         """
+
+    #         # Qualify both contracts
+    #         self.ib.qualifyContracts(current_contract, new_contract)
+
+    #         quantity = [pos.position for pos in self.ib.portfolio() if pos.contract.localSymbol==current_contract.localSymbol][0]
+    #         # Create a 'bag' (combination) order
+    #         close_leg = ComboLeg(conId=current_contract.conId, ratio=1, action="SELL" if quantity > 0 else "BUY", exchange=current_contract.exchange)
+    #         open_leg = ComboLeg(conId=new_contract.conId, ratio=1, action="BUY" if quantity > 0 else "SELL", exchange=new_contract.exchange)
+
+    #         combo_order = Order()
+    #         combo_order.orderType = "MKT"
+    #         combo_order.totalQuantity = abs(quantity)
+    #         combo_order.orderRef = orderRef
+    #         combo_order.algoStrategy = 'Adaptive'
+    #         combo_order.algoParams = [TagValue('adaptivePriority', 'Patient')]
+    #         combo_order.comboLegs = [close_leg, open_leg]
+
+    #         combo_order.orderRef = orderRef
+
+    #         # Place the order
+    #         trade = self.ib.placeOrder(Contract(symbol=current_contract.symbol, secIdType='BAG',exchange='SMART',currency='USD'), combo_order)
+    #         self.ib.sleep(1)
+    #         return trade
+    
+    def roll_future(self, current_contract, new_contract, orderRef=""):
+        """
             Roll a futures contract by closing the current contract and opening a new one.
 
             :param current_contract: The current ib_insync.Contract to be closed.
             :param new_contract: The new ib_insync.Contract to be opened.
-            :param quantity: The quantity to roll. Positive for long positions, negative for short.
             :param orderRef: Reference identifier for the order.
-            """
+        """
+        # Qualify contracts
+        self.ib.qualifyContracts(current_contract,new_contract)
 
-            # Qualify both contracts
-            self.ib.qualifyContracts(current_contract, new_contract)
+        # Define quantity based on current position
+        quantity = [pos.position for pos in self.ib.portfolio() if pos.contract.localSymbol==current_contract.localSymbol][0]
 
-            quantity = [pos.position for pos in self.ib.portfolio() if pos.contract.localSymbol==current_contract.localSymbol][0]
-            # Create a 'bag' (combination) order
-            close_leg = ComboLeg(conId=current_contract.conId, ratio=1, action="SELL" if quantity > 0 else "BUY", exchange=current_contract.exchange)
-            open_leg = ComboLeg(conId=new_contract.conId, ratio=1, action="BUY" if quantity > 0 else "SELL", exchange=new_contract.exchange)
+        # Define the combination contract (bag)
+        bag = Contract(symbol=current_contract.symbol, secType='BAG', exchange='SMART', currency=current_contract.currency)
+        bag.comboLegs = [
+            ComboLeg(conId=current_contract.conId, ratio=1, action="SELL" if quantity > 0 else "BUY",exchange=current_contract.exchange),  # Exiting the current contract
+            ComboLeg(conId=new_contract.conId, ratio=1, action="BUY" if quantity > 0 else "SELL",exchange=new_contract.exchange)        # Entering the new contract
+        ]
 
-            combo_order = Order()
-            combo_order.orderType = "MKT"
-            combo_order.totalQuantity = abs(quantity)
-            combo_order.orderRef = orderRef
-            combo_order.algoStrategy = 'Adaptive'
-            combo_order.algoParams = [TagValue('adaptivePriority', 'Patient')]
-            combo_order.comboLegs = [close_leg, open_leg]
+        # Create the order - here we use a Market order as an example
+        order = MarketOrder('BUY', abs(quantity))
+        order.orderRef = orderRef
 
-            combo_order.orderRef = orderRef
-
-            # Place the order
-            trade = self.ib.placeOrder(Contract(symbol=current_contract.symbol, secIdType='BAG',exchange='SMART',currency='USD'), combo_order)
-            self.ib.sleep(1)
-            return trade
+        # Place the order
+        trade = self.ib.placeOrder(bag, order)
+        return trade
