@@ -3,15 +3,15 @@ from ib_insync import *
 import pandas as pd
 import numpy as np
 import datetime
- 
 
 class VRP:
-    def __init__(self,ib):
+    def __init__(self,ib,trade_manager):
         self.ib = ib
         self.SPY_yfTicker = "^GSPC"
         self.VIX_yfTicker = "^VIX"
         self.instrument_symbol = "VXM"
-   
+        self.TradeManager = trade_manager
+
         # Get Data on Strategy Initialization
         self.term_structure = self.get_vxm_term_structure()
         
@@ -172,42 +172,44 @@ class VRP:
 
         return chosen_future
 
- 
-def check_conditions_and_trade(self):
-    """ Check the trading conditions and execute trades """
+    def check_conditions_and_trade(self):
+        """ Check the trading conditions and execute trades """
 
-    # Determine optimal Future to short
-    symbol_to_short = self.choose_future_to_short()
-    contract_to_short = self.ib.qualifyContracts(Future(localSymbol=symbol_to_short))
+        # Determine optimal Future to short
+        symbol_to_short = self.choose_future_to_short()
+        contract_to_short = self.ib.qualifyContracts(Future(localSymbol=symbol_to_short))
 
-    if not self.invested:
-        if self.vrp_df["VRP"].iloc[-1] > 0:
-            self.short_future(contract_to_short)
-    else:
-        # 
-        current_contract = self.get_invested_contract()
-        if current_contract != contract_to_short:
-            self.roll_future(current_contract, contract_to_short)
+        if not self.invested:
+            if self.vrp_df["VRP"].iloc[-1] > 0:
+                self.short_future(contract_to_short)
+        else:
+            # 
+            current_contract = self.get_invested_contract()
+            if current_contract != contract_to_short:
+                self.roll_future(current_contract, contract_to_short)
 
-def short_future(self, contract):
-    """ Short a future contract """
-    # Code for shorting a future...
+    def short_future(self, contract):
+        """ Short a future contract """
+        # Code for shorting a future...
 
-def get_invested_contract(self):
-    """ Get the current future contract in the portfolio """
-    self.inv_contract = [pos.contract for pos in self.ib.portfolio() if pos.contract.symbol==self.instrument_symbol][0]
-    return self.inv_contract
+    def get_invested_contract(self):
+        """ Get the current future contract in the portfolio """
+        if self.ib.portfolio():
+            self.inv_contract = [pos.contract for pos in self.ib.portfolio() if pos.contract.symbol==self.instrument_symbol][0]
+            return self.inv_contract
+        else:
+            return None
 
-def get_contract_price(self,contract):
-    market_data = self.ib.reqMktData(contract)
-    self.ib.sleep(1)  # Wait for the data to be fetched
-    last_price = market_data.last
+    def get_contract_price(self,contract):
+        market_data = self.ib.reqMktData(contract)
+        self.ib.sleep(1)  # Wait for the data to be fetched
+        last_price = market_data.last
 
-def roll_future(self, current_contract, new_contract):
-    """ Roll the future contract """
-    self.close_position(current_contract)
-    self.short_future(new_contract)
+    def roll_future(self, current_contract, new_contract):
+        """ Roll the future contract """
+        self.close_position(current_contract)
+        self.short_future(new_contract)
 
-def close_position(self, contract):
-    """ Close the position in the given future contract """
-    # Code for closing the position...
+    def close_position(self, contract):
+        """ Close the position in the given future contract """
+        # Code for closing the position...
