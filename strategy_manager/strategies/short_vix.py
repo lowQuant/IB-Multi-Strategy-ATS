@@ -3,14 +3,24 @@ from ib_insync import *
 import pandas as pd
 import numpy as np
 import datetime
+from broker.trademanager import TradeManager
+from gui.log import add_log, start_event
+# TODO: # FINISH STRATEGY
+        # Assign callbacks for order updates and code the functions in trade_manager which sends updates to strategy_manager
+        # trade.fillEvent += self.trade_manager.on_fill
+        # trade.statusEvent += self.trade_manager.on_status_change 
+
 
 class VRP:
-    def __init__(self,ib,trade_manager):
+    def __init__(self,ib,strategy_manager,trade_manager):
         self.ib = ib
+        self.strategy_manager = strategy_manager
+        self.trade_manager = trade_manager
+
+        self.strategy_symbol = "SVRP"
         self.SPY_yfTicker = "^GSPC"
         self.VIX_yfTicker = "^VIX"
         self.instrument_symbol = "VXM"
-        self.TradeManager = trade_manager
 
         # Get Data on Strategy Initialization
         self.term_structure = self.get_vxm_term_structure()
@@ -174,7 +184,6 @@ class VRP:
 
     def check_conditions_and_trade(self):
         """ Check the trading conditions and execute trades """
-
         # Determine optimal Future to short
         symbol_to_short = self.choose_future_to_short()
         contract_to_short = self.ib.qualifyContracts(Future(localSymbol=symbol_to_short))
@@ -190,7 +199,15 @@ class VRP:
 
     def short_future(self, contract):
         """ Short a future contract """
-        # Code for shorting a future...
+        # self, contract, quantity, order_type='MKT', urgency='Patient', orderRef="", limit=None)
+        allocated_amount = self.equity * self.target_weight
+        if self.cash > allocated_amount:
+            contract_price = self.get_contract_price(contract)
+            multiplier = contract.multiplier
+            quantity = self.calculate_number_of_contracts(allocated_amount,contract_price,multiplier)
+            self.trade_manager.trade(self,contract,quantity)
+        else:
+            add_log(f"Insufficient Cash to run strategy{self.strategy_symbol}")
 
     def get_invested_contract(self):
         """ Get the current future contract in the portfolio """
