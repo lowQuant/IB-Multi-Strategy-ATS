@@ -125,74 +125,6 @@ class VRP:
         # Convert the dictionary to DataFrame
         self.term_structure = pd.DataFrame(futures_data)
         return self.term_structure
-    
-    # def get_vxm_term_structure(self):
-    #     """Returns a DataFrame of the VXM future term structure"""
-    # # Get today's date
-    #     today = datetime.datetime.now()
- 
-    #     # Dictionary to store futures data
-    #     futures_data = {
-    #         'Contract': [],
-    #         'LastPrice': [],
-    #         'DTE': [],
-    #         'AnnualizedYield': []
-    #     }
- 
-    #     # Set market data type to delayed frozen data
-    #     self.ib.reqMarketDataType(3)
- 
-    #     # Get the spot rate from your function
-    #     spot_rate_df = self.download_vix_and_spy_data()
-    #     spot_rate = spot_rate_df['VIX'].iloc[-1]  # Latest VIX spot rate
-
-    #     # Add the Spot VIX to the dataframe
-    #     futures_data['Contract'].append("VIX Index")
-    #     futures_data['LastPrice'].append(spot_rate)
-    #     futures_data['DTE'].append(0)
-    #     futures_data['AnnualizedYield'].append(None)
-        
-    #     for i in range(9):  # Next 9 maturities
-    #         # Calculate the contract month
-    #         month = (today.month + i - 1) % 12 + 1
-    #         year = today.year + (today.month + i - 1) // 12
-    #         contract_month = f"{year}{month:02}"
- 
-    #         # Find the futures contract
-    #         fut = self.ib.qualifyContracts(Future('VXM', lastTradeDateOrContractMonth=contract_month))
- 
-    #         if fut:
-    #             # Fetch the latest market data
-    #             market_data = self.ib.reqMktData(fut[0])
-    #             self.ib.sleep(1)  # Wait for the data to be fetched
-    #             last_price = market_data.last
-    #             if last_price <= 0:
-    #                 last_price = market_data.bid
-                
-    #             # Ensure that we have valid market data
-    #             if last_price is not None:
-    #                 # Calculate days until expiration
-    #                 expiration_date = datetime.datetime.strptime(fut[0].lastTradeDateOrContractMonth, '%Y%m%d')
-    #                 dte = (expiration_date - today).days
-
-    #                 if dte==0:
-    #                     annualized_yield = None
-    #                 else:
-    #                     # Calculate annualized yield
-    #                     if last_price >= spot_rate:
-    #                         annualized_yield =((spot_rate / last_price) ** (365 / dte) - 1)
-    #                     else:
-    #                         annualized_yield = ((last_price  / spot_rate) ** (365 / dte) - 1)
- 
-    #                 # Append the data to the dictionary
-    #                 futures_data['Contract'].append(fut[0].localSymbol)
-    #                 futures_data['LastPrice'].append(last_price)
-    #                 futures_data['DTE'].append(dte)
-    #                 futures_data['AnnualizedYield'].append(annualized_yield)
- 
-    #     # Convert the dictionary to DataFrame
-    #     self.term_structure = pd.DataFrame(futures_data)
-    #     return self.term_structure
  
     def is_contango(self):
         """Returns True if VXM Futures trade in contango, False if in Backwardation"""
@@ -272,9 +204,42 @@ class VRP:
                     print(f"We need to change our positioning by {rebal_amount} contracts")
                     self.trade_manager.trade(self,current_contract,rebal_amount*-1)
 
+    def update_investment_status(self):
+        """ Update the investment status of the strategy """
+        self.current_weight = self.check_investment_weight(self, symbol=self.instrument_symbol)
+        self.invested = bool(self.current_weight)
+        self.equity = sum(float(entry.value) for entry in self.ib.accountSummary() if entry.tag == "EquityWithLoanValue")
+        self.cash = sum(float(entry.value) for entry in self.ib.accountSummary() if entry.tag == "AvailableFunds")
+
+    def update_invested_contract(self):
+        """ Update the currently invested contract """
+        if self.ib.portfolio():
+            invested_contracts = [pos.contract for pos in self.ib.portfolio() if pos.contract.symbol == self.instrument_symbol]
+            self.invested_contract = invested_contracts[0] if invested_contracts else None
+            if self.invested_contract:
+                self.ib.qualifyContracts(self.invested_contract)
+
     def get_next_contract(self, current_contract):
-        """find the next contract"""
-        pass
+        """Find the next contract."""
+        self.ib.qualifyContracts(current_contract)
+
+        # Extract year and month from the current contract's lastTradeDateOrContractMonth
+        expiration = current_contract.lastTradeDateOrContractMonth
+        year, month = int(expiration[:4]), int(expiration[4:6])
+
+        # Calculate the next month
+        next_month = month + 1
+        next_year = year
+        if next_month > 12:
+            next_month = 1
+            next_year += 1
+
+        next_month_str = f"{next_year}{next_month:02}"
+        # Create the next contract
+        next_contract = Future(symbol=current_contract.symbol, lastTradeDateOrContractMonth=next_month_str)
+        self.ib.qualifyContracts(next_contract)
+
+        return next_contract
 
     def get_dte(self,current_contract):
         today = datetime.datetime.now()         
