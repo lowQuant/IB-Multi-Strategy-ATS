@@ -5,10 +5,11 @@ from ib_insync import *
 import time, asyncio
 
 class Strategy:
-    def __init__(self, ib_client,strategy_manager):
+    def __init__(self, ib_client,strategy_manager,trade_manager):
         self.ib = ib_client
         self.strategy_symbol = "SVIX"
         self.strategy_manager = strategy_manager
+        self.trade_manager = trade_manager
 
     # def on_updates(self, trade: Trade, update: str):
     #     if trade.orderStatus.status == 'Filled':

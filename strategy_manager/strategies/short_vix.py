@@ -3,14 +3,25 @@ from ib_insync import *
 import pandas as pd
 import numpy as np
 import datetime
- 
+from broker.trademanager import TradeManager
+from gui.log import add_log, start_event
+
+# TODO: # FINISH STRATEGY
+        # Assign callbacks for order updates and code the functions in trade_manager which sends updates to strategy_manager
+        # trade.fillEvent += self.trade_manager.on_fill
+        # trade.statusEvent += self.trade_manager.on_status_change 
 
 class VRP:
-    def __init__(self,ib):
+    def __init__(self,ib,strategy_manager,trade_manager):
         self.ib = ib
+        self.strategy_manager = strategy_manager
+        self.trade_manager = trade_manager
+
+        self.strategy_symbol = "SVRP"
         self.SPY_yfTicker = "^GSPC"
         self.VIX_yfTicker = "^VIX"
-   
+        self.instrument_symbol = "VXM"
+
         # Get Data on Strategy Initialization
         self.term_structure = self.get_vxm_term_structure()
         
@@ -28,8 +39,6 @@ class VRP:
     def check_investment_weight(self, symbol):
         """ Returns the investment weight for the given symbol. """
         try:
-            positions = self.ib.portfolio()
- 
             # Sum up the investment value for all positions of the given symbol
             market_value = [pos.marketValue for pos in self.ib.portfolio() if pos.contract.symbol==symbol]
             market_value = market_value[0] if market_value else market_value
@@ -61,72 +70,58 @@ class VRP:
    
         self.vrp_df = spx_df.merge(vix_df, left_index=True, right_index=True, how='inner')
         self.vrp_df ['VRP'] = self.vrp_df ['VIX'].shift(21) - self.vrp_df ['Realised Volatility']
-        print("Latest Volatility Risk Premium",self.vrp_df.tail())
+        #print("Latest Volatility Risk Premium",self.vrp_df.tail())
         return self.vrp_df
  
     def get_vxm_term_structure(self):
         """Returns a DataFrame of the VXM future term structure"""
-    # Get today's date
         today = datetime.datetime.now()
- 
-        # Dictionary to store futures data
-        futures_data = {
-            'Contract': [],
-            'LastPrice': [],
-            'DTE': [],
-            'AnnualizedYield': []
-        }
- 
+
+        # Generate contract months for the next 9 maturities
+        contract_months = [
+            f"{today.year + (today.month + i - 1) // 12}{(today.month + i - 1) % 12 + 1:02}" 
+            for i in range(9)
+        ]
+
+        # Create Future objects for each contract month
+        contracts = [Future("VXM", lastTradeDateOrContractMonth=exp) for exp in contract_months]
+        qualified_contracts = self.ib.qualifyContracts(*contracts)
+
         # Set market data type to delayed frozen data
-        self.ib.reqMarketDataType(4)
- 
-        # Get the spot rate from your function
+        self.ib.reqMarketDataType(3)
+
+        # Get the spot rate
         spot_rate_df = self.download_vix_and_spy_data()
-        spot_rate = spot_rate_df['VIX'].iloc[-1]  # Latest VIX spot rate
-        print("Current Spot Rate:",spot_rate)
+        spot_rate = spot_rate_df['VIX'].iloc[-1]
 
-        # Append the data to the dictionary
-        futures_data['Contract'].append("VIX Index")
-        futures_data['LastPrice'].append(spot_rate)
-        futures_data['DTE'].append(0)
-        futures_data['AnnualizedYield'].append(None)
-        
-        for i in range(9):  # Next 9 maturities
-            # Calculate the contract month
-            month = (today.month + i - 1) % 12 + 1
-            year = today.year + (today.month + i - 1) // 12
-            contract_month = f"{year}{month:02}"
- 
-            # Find the futures contract
-            fut = self.ib.qualifyContracts(Future('VXM', lastTradeDateOrContractMonth=contract_month))
- 
-            if fut:
-                # Fetch the latest market data
-                market_data = self.ib.reqMktData(fut[0])
-                self.ib.sleep(1)  # Wait for the data to be fetched
-                last_price = market_data.last
-                print(f"{fut}: {last_price}")
-                # Ensure that we have valid market data
-                if last_price is not None:
-                    # Calculate days until expiration
-                    expiration_date = datetime.datetime.strptime(fut[0].lastTradeDateOrContractMonth, '%Y%m%d')
-                    dte = (expiration_date - today).days
+        # Prepare data collection
+        futures_data = {
+            'Contract': ["VIX Index"] + [contract.localSymbol for contract in qualified_contracts],
+            'LastPrice': [spot_rate],
+            'DTE': [0],
+            'AnnualizedYield': [None]
+        }
 
-                    if dte==0:
-                        annualized_yield = None
-                    else:
-                        # Calculate annualized yield
-                        if last_price >= spot_rate:
-                            annualized_yield =((spot_rate / last_price) ** (365 / dte) - 1)
-                        else:
-                            annualized_yield = ((last_price  / spot_rate) ** (365 / dte) - 1)
- 
-                    # Append the data to the dictionary
-                    futures_data['Contract'].append(fut[0].localSymbol)
-                    futures_data['LastPrice'].append(last_price)
-                    futures_data['DTE'].append(dte)
-                    futures_data['AnnualizedYield'].append(annualized_yield)
- 
+        for contract in qualified_contracts:
+            market_data = self.ib.reqMktData(contract)
+            self.ib.sleep(1)  # Wait for the data to be fetched
+            last_price = market_data.last if market_data.last > 0 else market_data.bid
+
+            expiration_date = datetime.datetime.strptime(contract.lastTradeDateOrContractMonth, '%Y%m%d')
+            dte = (expiration_date - today).days
+
+            annualized_yield = None
+                #                     if last_price >= spot_rate:
+    #                         annualized_yield =((spot_rate / last_price) ** (365 / dte) - 1)
+    #                     else:
+    #                         annualized_yield = ((last_price  / spot_rate) ** (365 / dte) - 1)
+            if dte != 0:
+                annualized_yield = ((last_price / spot_rate) ** (365 / dte) - 1) if last_price <= spot_rate else ((spot_rate / last_price) ** (365 / dte) - 1)
+
+            futures_data['LastPrice'].append(last_price)
+            futures_data['DTE'].append(dte)
+            futures_data['AnnualizedYield'].append(annualized_yield)
+
         # Convert the dictionary to DataFrame
         self.term_structure = pd.DataFrame(futures_data)
         return self.term_structure
@@ -171,45 +166,130 @@ class VRP:
 
         return chosen_future
 
-
     def check_conditions_and_trade(self):
-            """ Check the trading conditions and execute trades """
- 
-            if not self.invested:
- 
+        """ Check the trading conditions and execute trades """
+        # Determine optimal Future to short
+        symbol_to_short = self.choose_future_to_short()
+        contract_to_short = self.ib.qualifyContracts(Future(localSymbol=symbol_to_short))[0]
 
-                if self.vrp_df["VRP"].iloc[-1] > 0:
-                    # Determine optimal Future to short
-                    symbol_to_short  = self.choose_future_to_short()
-                    contract_to_short = self.ib.qualifyContracts(Future(symbol=symbol_to_short))
-                    # Determine the number of contracts based on target weight
-                    contract_price = self.term_structure.loc[self.term_structure['Contract'] == symbol_to_short, 'LastPrice'].iloc[0]
-                    number_of_contracts = self.calculate_number_of_contracts(self.equity * self.target_weight, contract_price, contract_size=100)
- 
-                    # Execute short trade (simplified version)
-                    order = MarketOrder('SELL', number_of_contracts)
-                    trade = self.ib.placeOrder(contract_to_short, order)
-                    self.ib.sleep(1)  # Wait for the trade to be executed
- 
-                    print(f"Shorted {number_of_contracts} contracts of {symbol_to_short}")
- 
-            # Manage position if already invested
-            else:
-                # Check if current weight is within the specified range
-                if abs(self.min_weight) < abs(self.current_weight) < abs(self.max_weight):
-                    print(f"VRP is {self.current_weight*100}% invested. Consider rebalancing.")
- 
-                    # Add logic for rebalancing or rolling the position
- 
-                # Reduce position if it exceeds the max weight
-                elif self.current_weight > self.max_weight:
-                    # Add logic to reduce position
- 
-                    print("Reducing position to align with max weight.")
- 
-                # Increase position if it's below the min weight
-                elif self.current_weight < self.min_weight:
-                    # Add logic to increase position
- 
-                    print("Increasing position to align with min weight.")
-   
+        if not self.invested:
+            if self.vrp_df["VRP"].iloc[-1] > 0:
+                self.short_future(contract_to_short)
+        else:
+            # handle position management when invested
+            current_contract = self.get_invested_contract()
+
+            # when another contract has a higher expected yield, roll futures
+            if current_contract != contract_to_short:
+                self.roll_future(current_contract, contract_to_short)
+            
+            # Check for a natural roll
+            dte = self.get_dte(current_contract)
+            if dte <= 5:
+                new_contract = self.get_next_contract(current_contract)
+                if new_contract:
+                    self.trade_manager.roll_future(current_contract, new_contract, orderRef=self.strategy_symbol)
+            
+            # check if we need to rebalance, because we are out of investment limits
+            if self.min_weight < self.current_weight or self.current_weight > self.max_weight:
+                allocated_amount = self.equity * self.target_weight
+                contract_price = self.get_contract_price(current_contract)
+                multiplier = int(current_contract.multiplier)
+                target_quantity = self.calculate_number_of_contracts(allocated_amount,contract_price,multiplier)
+                invested_quantity = [pos.position for pos in self.ib.portfolio() if pos.contract.localSymbol==current_contract.localSymbol][0]
+
+                rebal_amount = target_quantity - abs(invested_quantity)
+
+                if rebal_amount:
+                    print(f"We need to change our positioning by {rebal_amount} contracts")
+                    self.trade_manager.trade(self,current_contract,rebal_amount*-1)
+
+    def update_investment_status(self):
+        """ Update the investment status of the strategy """
+        self.current_weight = self.check_investment_weight(self, symbol=self.instrument_symbol)
+        self.invested = bool(self.current_weight)
+        self.equity = sum(float(entry.value) for entry in self.ib.accountSummary() if entry.tag == "EquityWithLoanValue")
+        self.cash = sum(float(entry.value) for entry in self.ib.accountSummary() if entry.tag == "AvailableFunds")
+
+    def update_invested_contract(self):
+        """ Update the currently invested contract """
+        if self.ib.portfolio():
+            invested_contracts = [pos.contract for pos in self.ib.portfolio() if pos.contract.symbol == self.instrument_symbol]
+            self.invested_contract = invested_contracts[0] if invested_contracts else None
+            if self.invested_contract:
+                self.ib.qualifyContracts(self.invested_contract)
+
+    def get_next_contract(self, current_contract):
+        """Find the next contract."""
+        self.ib.qualifyContracts(current_contract)
+
+        # Extract year and month from the current contract's lastTradeDateOrContractMonth
+        expiration = current_contract.lastTradeDateOrContractMonth
+        year, month = int(expiration[:4]), int(expiration[4:6])
+
+        # Calculate the next month
+        next_month = month + 1
+        next_year = year
+        if next_month > 12:
+            next_month = 1
+            next_year += 1
+
+        next_month_str = f"{next_year}{next_month:02}"
+        # Create the next contract
+        next_contract = Future(symbol=current_contract.symbol, lastTradeDateOrContractMonth=next_month_str)
+        self.ib.qualifyContracts(next_contract)
+
+        return next_contract
+
+    def get_dte(self,current_contract):
+        today = datetime.datetime.now()         
+        expiration_date = datetime.datetime.strptime(current_contract.lastTradeDateOrContractMonth, '%Y%m%d')
+        dte = (expiration_date - today).days
+        return dte
+
+    def short_future(self, contract):
+        """ Short a future contract """
+        # self, contract, quantity, order_type='MKT', urgency='Patient', orderRef="", limit=None)
+        allocated_amount = self.equity * self.target_weight
+        if self.cash > allocated_amount:
+            contract_price = self.get_contract_price(contract)
+            multiplier = int(contract.multiplier)
+            quantity = self.calculate_number_of_contracts(allocated_amount,contract_price,multiplier)
+            self.trade_manager.trade(self,contract,quantity)
+        else:
+            add_log(f"Insufficient Cash to run strategy{self.strategy_symbol}")
+
+    def get_invested_contract(self):
+        """ Get the current future contract in the portfolio """
+        if self.ib.portfolio():
+            self.invested_contract = [pos.contract for pos in self.ib.portfolio() if pos.contract.symbol==self.instrument_symbol][0]
+            self.ib.qualifyContracts(self.invested_contract)
+            return self.invested_contract
+        else:
+            return None
+
+    def get_contract_price(self,contract):
+        market_data = self.ib.reqMktData(contract)
+        self.ib.sleep(1)  # Wait for the data to be fetched
+        last_price = market_data.last
+        if last_price > 0:
+            return last_price
+        else:
+            return market_data.bid
+
+    def roll_future(self, current_contract, new_contract,orderRef=""):
+        """
+            Roll a futures contract by closing the current contract and opening a new one.
+
+            :param current_contract: The current ib_insync.Contract to be closed.
+            :param new_contract: The new ib_insync.Contract to be opened.
+            :param orderRef: Reference identifier for the order.
+        """
+        if self.get_dte(current_contract) < self.get_dte(new_contract):
+            self.trade_manager.roll_future(self,current_contract,new_contract,orderRef)
+        else:
+            add_log("Not allowed to roll future down the curve")
+
+    def close_position(self, contract):
+        """ Close the position in the given future contract """
+        # Code for closing the position...

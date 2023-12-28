@@ -12,7 +12,7 @@ from .log import add_log, start_event
 # Global variables for strategy threads
 strategy_threads = []
 jupyter_subprocess = None
-
+ib_client = None
 
 # consider deleting
 def load_strategy(strategy_name):
@@ -30,11 +30,11 @@ def load_strategy(strategy_name):
     return strategy_module
 
 def start_trading(stop_button, start_button, window, start_event):
-    global strategy_manager
-    ib = connect_to_IB()
-    if ib:
+    global strategy_manager, ib_client
+    ib_client = connect_to_IB()
+    if ib_client:
         start_event.set()
-        strategy_manager = StrategyManager(ib)
+        strategy_manager = StrategyManager(ib_client)
         strategy_manager.start_all()
 
         stop_button.place(x=48.0, y=79.0, width=178.0, height=58.0)  # Show 'Stop Trading' button
