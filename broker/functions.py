@@ -9,14 +9,14 @@ import datetime
 util.startLoop()  # Needed in script mode
 ib = IB()
 try:
-    ib.connect('127.0.0.1', 7497, clientId=0)
+    ib.connect('127.0.0.1', 7497, clientId=2)
 except ConnectionError:
     print('Connection failed. Start TWS or IB Gateway and try again!')
 except:
-    ib.connect('127.0.0.1', 7497, clientId=1)
+    ib.connect('127.0.0.1', 7497, clientId=4)
 
 
-def get_term_structure(future_symbol,index_symbol, yf = False):
+def get_term_structure(future_symbol,index_symbol, exchange=None, yf = False):
         """Returns a DataFrame of a futures term structure
 
         param future_symbol str:    contract's ib ticker symbol
@@ -28,12 +28,22 @@ def get_term_structure(future_symbol,index_symbol, yf = False):
         # Generate contract months for the next 9 maturities
         monthly_expirations = [
             f"{today.year + (today.month + i - 1) // 12}{(today.month + i - 1) % 12 + 1:02}" 
-            for i in range(12)
+            for i in range(13)
         ]
         
         # Create Future objects for each contract month
-        contracts = [Future(future_symbol, lastTradeDateOrContractMonth=exp) for exp in monthly_expirations]
-        qualified_contracts = ib.qualifyContracts(*contracts)
+        
+        if exchange is None:
+            contracts = [Future(future_symbol, lastTradeDateOrContractMonth=exp) for exp in monthly_expirations]
+            qualified_contracts = ib.qualifyContracts(*contracts)
+        else:
+            try:
+                contracts = [Future(symbol=future_symbol, exchange=exchange,lastTradeDateOrContractMonth=exp) for exp in monthly_expirations]
+                qualified_contracts = ib.qualifyContracts(*contracts)
+            except:
+                contracts = [Future(symbol=future_symbol, exchange=exchange, lastTradeDateOrContractMonth=exp) 
+                            for exp in monthly_expirations if exp[-1] in ['3','6','9','12']]
+                qualified_contracts = ib.qualifyContracts(*contracts)
         ib.sleep(1)
 
         # Set market data type to delayed frozen data
@@ -46,7 +56,7 @@ def get_term_structure(future_symbol,index_symbol, yf = False):
             idx = Index(index_symbol)
             ib.qualifyContracts(idx)
             idx_details = ib.reqMktData(idx)
-            ib.sleep(1)
+            ib.sleep(2)
             spot = idx_details.last
 
         futures_data = {
@@ -96,23 +106,8 @@ def get_index_spot(yf_ticker):
 # spot = get_index_spot("^VIX")
 
 
-# df = get_term_structure("ES","SPX")
+# df = get_term_structure("ES","SPX","CME")
 # print(df)
-         
-idx = Index("VIX")
-ib.qualifyContracts(idx)
-print(idx)
+# df = get_term_structure("VXM","VIX")
+# print(df)
 
-
-# expiry1 = df.Contract[1]
-# con = Future(localSymbol=expiry1)
-# ib.qualifyContracts(con)
-# details = ib.reqContractDetails(con)[0]
-
-# print(details.underSymbol)
-
-# index = Index("VIX")
-# ib.qualifyContracts(index)
-# index_price = ib.reqMktData(index)
-# ib.sleep(1)
-# print(index_price)
