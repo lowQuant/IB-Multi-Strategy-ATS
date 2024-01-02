@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import datetime
 from broker.trademanager import TradeManager
+from broker.functions import get_term_structure
 from gui.log import add_log, start_event
 
 # TODO: # FINISH STRATEGY
@@ -23,15 +24,13 @@ class VRP:
         self.instrument_symbol = "VXM"
 
         # Get Data on Strategy Initialization
-        self.term_structure = self.get_vxm_term_structure()
+        self.term_structure = get_term_structure(self.instrument_symbol,"VIX",ib=self.ib)
+        self.volatility_risk_premium = self.download_vix_and_spy_data()["VRP"].iloc[-1]
+        self.is_contango = self.is_contango()
         
-        # Equity & Cash Management
-        self.equity = sum(float(entry.value) for entry in self.ib.accountSummary() if entry.tag == "EquityWithLoanValue")
-        self.cash = sum(float(entry.value) for entry in self.ib.accountSummary() if entry.tag == "AvailableFunds")
- 
         # Position Management
-        self.current_weight = self.check_investment_weight(self,symbol="VXM")
-        self.invested = bool(self.current_weight)
+        self.update_investment_status()
+        self.update_invested_contract()
         self.min_weight, self.target_weight, self.max_weight = 0.04, 0.07, 0.1
         # self.target_weight, self.min_weight, self.max_weight = hp.get_allocation_allowance(self.strategy_symbol)
        
@@ -53,7 +52,22 @@ class VRP:
         except Exception as e:
             print(f"Error calculating investment weight: {e}")
             return None  # or handle the error as appropriate
- 
+
+    def update_investment_status(self):
+        """ Update the investment status of the strategy """
+        self.current_weight = self.check_investment_weight(self, symbol=self.instrument_symbol)
+        self.invested = bool(self.current_weight)
+        self.equity = sum(float(entry.value) for entry in self.ib.accountSummary() if entry.tag == "EquityWithLoanValue")
+        self.cash = sum(float(entry.value) for entry in self.ib.accountSummary() if entry.tag == "AvailableFunds")
+
+    def update_invested_contract(self):
+        """ Update the currently invested contract """
+        if self.ib.portfolio():
+            invested_contracts = [pos.contract for pos in self.ib.portfolio() if pos.contract.symbol == self.instrument_symbol]
+            self.invested_contract = invested_contracts[0] if invested_contracts else None
+            if self.invested_contract:
+                self.ib.qualifyContracts(self.invested_contract)
+
     def download_vix_and_spy_data(self):
         """ Fetch historical data from Yahoo Finance """
         d = datetime.timedelta(days=120)
@@ -73,66 +87,14 @@ class VRP:
         #print("Latest Volatility Risk Premium",self.vrp_df.tail())
         return self.vrp_df
  
-    def get_vxm_term_structure(self):
-        """Returns a DataFrame of the VXM future term structure"""
-        today = datetime.datetime.now()
-
-        # Generate contract months for the next 9 maturities
-        contract_months = [
-            f"{today.year + (today.month + i - 1) // 12}{(today.month + i - 1) % 12 + 1:02}" 
-            for i in range(9)
-        ]
-
-        # Create Future objects for each contract month
-        contracts = [Future("VXM", lastTradeDateOrContractMonth=exp) for exp in contract_months]
-        qualified_contracts = self.ib.qualifyContracts(*contracts)
-
-        # Set market data type to delayed frozen data
-        self.ib.reqMarketDataType(3)
-
-        # Get the spot rate
-        spot_rate_df = self.download_vix_and_spy_data()
-        spot_rate = spot_rate_df['VIX'].iloc[-1]
-
-        # Prepare data collection
-        futures_data = {
-            'Contract': ["VIX Index"] + [contract.localSymbol for contract in qualified_contracts],
-            'LastPrice': [spot_rate],
-            'DTE': [0],
-            'AnnualizedYield': [None]
-        }
-
-        for contract in qualified_contracts:
-            market_data = self.ib.reqMktData(contract)
-            self.ib.sleep(1)  # Wait for the data to be fetched
-            last_price = market_data.last if market_data.last > 0 else market_data.bid
-
-            expiration_date = datetime.datetime.strptime(contract.lastTradeDateOrContractMonth, '%Y%m%d')
-            dte = (expiration_date - today).days
-
-            annualized_yield = None
-                #                     if last_price >= spot_rate:
-    #                         annualized_yield =((spot_rate / last_price) ** (365 / dte) - 1)
-    #                     else:
-    #                         annualized_yield = ((last_price  / spot_rate) ** (365 / dte) - 1)
-            if dte != 0:
-                annualized_yield = ((last_price / spot_rate) ** (365 / dte) - 1) if last_price <= spot_rate else ((spot_rate / last_price) ** (365 / dte) - 1)
-
-            futures_data['LastPrice'].append(last_price)
-            futures_data['DTE'].append(dte)
-            futures_data['AnnualizedYield'].append(annualized_yield)
-
-        # Convert the dictionary to DataFrame
-        self.term_structure = pd.DataFrame(futures_data)
-        return self.term_structure
- 
     def is_contango(self):
         """Returns True if VXM Futures trade in contango, False if in Backwardation"""
         try:
             self.is_contango = self.term_structure['LastPrice'].is_monotonic_increasing
         except:
-            self.get_vxm_term_structure()
+            get_term_structure(self.instrument_symbol,self.VIX_yfTicker,yf=True,ib=self.ib)
             self.is_contango = self.term_structure['LastPrice'].is_monotonic_increasing
+        return self.is_contango
  
     def calculate_number_of_contracts(self,allocated_amount, contract_price, contract_size):
         """

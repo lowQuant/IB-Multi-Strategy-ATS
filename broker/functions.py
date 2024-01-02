@@ -6,17 +6,18 @@ from ib_insync import *
 # from gui.log import add_log
 import datetime
 
-util.startLoop()  # Needed in script mode
-ib = IB()
-try:
-    ib.connect('127.0.0.1', 7497, clientId=2)
-except ConnectionError:
-    print('Connection failed. Start TWS or IB Gateway and try again!')
-except:
-    ib.connect('127.0.0.1', 7497, clientId=4)
+# util.startLoop()  # Needed in script mode
+# ib = IB()
+# try:
+#     ib.connect('127.0.0.1', 7497, clientId=2)
+# except ConnectionError:
+#     print('Connection failed. Start TWS or IB Gateway and try again!')
+# except:
+#     ib.connect('127.0.0.1', 7497, clientId=4)
 
 
-def get_term_structure(future_symbol,index_symbol, exchange=None, yf = False):
+######## FUNCTIONS TO RETRIEVE INSTRUMENT QUOTES
+def get_term_structure(future_symbol,index_symbol, exchange=None, yf = False, ib=None):
         """Returns a DataFrame of a futures term structure
 
         param future_symbol str:    contract's ib ticker symbol
@@ -86,7 +87,6 @@ def get_term_structure(future_symbol,index_symbol, exchange=None, yf = False):
         term_structure = pd.DataFrame(futures_data)
         return term_structure
         
-
 def get_index_spot(yf_ticker):
 # Fetch data for the VIX index
     idx = yf.Ticker(yf_ticker)

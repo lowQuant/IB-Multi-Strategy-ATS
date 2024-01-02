@@ -15,7 +15,7 @@ def open_settings_window(main_window):
     
     settings_window = Toplevel(main_window)
     settings_window.title("Settings")
-    settings_window.geometry("480x585")
+    settings_window.geometry("520x585")
 
     tab_control = ttk.Notebook(settings_window)
     general_tab = Frame(tab_control)
@@ -216,12 +216,14 @@ def populate_overview_tab(tab_frame, tab_control):
         Label(tab_frame, text="Name", font=("bold")).grid(row=0, column=1, padx=5, pady=5)
         Label(tab_frame, text="Filename", font=("bold")).grid(row=0, column=2, padx=5, pady=5)
         Label(tab_frame, text="Target Weight", font=("bold")).grid(row=0, column=3, padx=5, pady=5)
+        #Label(tab_frame, text="active", font=("bold")).grid(row=0, column=4, padx=5, pady=5)
 
         for index, strategy in enumerate(strategies):
             Label(tab_frame, text=strategy).grid(row=index + 1, column=0, padx=5, pady=5)
             Label(tab_frame, text=df.loc[strategy, 'name']).grid(row=index + 1, column=1, padx=5, pady=5)
             Label(tab_frame, text=df.loc[strategy, 'filename']).grid(row=index + 1, column=2, padx=5, pady=5)
             Label(tab_frame, text=df.loc[strategy, 'target_weight']).grid(row=index + 1, column=3, padx=5, pady=5)
+            
         
         Button(tab_frame, text="Add another Strategy", command=lambda: add_strategy_window(tab_frame)).grid(row=98, column=0, columnspan=3, pady=10, padx=10)
     else:
