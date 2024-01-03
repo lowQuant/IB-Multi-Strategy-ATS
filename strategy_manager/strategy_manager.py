@@ -5,12 +5,14 @@ import os, queue, asyncio
 import threading
 from data_and_research.utils import fetch_strategies
 from gui.log import add_log
+from broker.trademanager import TradeManager
 
 class StrategyManager:
     def __init__(self, ib_client):
         self.ib_client = ib_client
         self.strategy_threads = []
         self.strategies = []
+        self.trade_manager = TradeManager(ib_client=ib_client)
 
         # Create a queue for thread safe editing of shared resources (e.g. updating available cash etc.)
         self.message_queue = queue.Queue()
@@ -42,7 +44,7 @@ class StrategyManager:
 
                     if hasattr(module, 'Strategy'):
                         print(f"Instantiating strategy: {module_name}")
-                        strategy_instance = module.Strategy(self.ib_client, self)
+                        strategy_instance = module.Strategy(self.ib_client, self, self.trade_manager)
                         self.strategies.append(strategy_instance)
                     else:
                         print(f"No 'Strategy' class found in {module_name}")
@@ -50,14 +52,6 @@ class StrategyManager:
                     print(f"Error loading strategy {module_name}: {e}")
 
             print("Loaded strategies:", [type(s).__name__ for s in self.strategies])
-
-    # def start_all(self):
-    #     loop = asyncio.get_event_loop()
-    #     for strategy in self.strategies:
-    #         if hasattr(strategy, 'run'):
-    #             add_log(f"Starting strategy: {type(strategy).__name__}")
-    #             loop.create_task(strategy.run())  # Schedule the coroutine to be run on the event loop
-    #             add_log(f"Started strategy task: {type(strategy).__name__}")
 
     def start_all(self):
         for strategy in self.strategies:

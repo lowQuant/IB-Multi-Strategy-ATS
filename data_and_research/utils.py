@@ -2,6 +2,8 @@
 import numpy as np
 import pandas as pd
 from datetime import datetime
+import importlib.util
+from pathlib import Path
 from arcticdb import Arctic, QueryBuilder
 
 def initialize_db(db_path):
@@ -56,13 +58,73 @@ def fetch_strategies():
     lib = ac.get_library('general', create_if_missing=True)
     if lib.has_symbol("strategies"):
         strat_df = lib.read("strategies").data
-        print("strat df:", strat_df)
+        # print("library 'strategies' cols: ",strat_df.columns)
         strategies = strat_df.index.to_list()
-        print("strategies:" , strategies)
+        # print("strategies:" , strategies)
     else:
         strategies = []
         strat_df = pd.DataFrame()
     return strategies, strat_df
 
-def fetch_strategy_params(strategy_name):
-    pass
+def fetch_strategy_params(strategy_symbol):
+    lib = ac.get_library('general', create_if_missing=True)
+    if lib.has_symbol("strategies"):
+        strat_df = lib.read("strategies").data
+        params = strat_df.loc[strategy_symbol,"params"]
+        if params:
+            try:
+                params_dict = eval(params)  # Converts string to dictionary
+                print("loaded params from our db")
+                return params_dict
+            except:
+                return params # returns params on error as params is probably a string (Error Code)
+        else:
+            strategy_file = strat_df.loc[strategy_symbol,"filename"]
+            print(f"Fetching PARAMS from {strategy_file}")
+            params = load_params_from_module(strategy_file)
+
+            if params:
+                print("Updating the database")
+                update_params_in_db(strategy_symbol, params)  # Update the database
+                return params
+    
+def load_params_from_module(strategy_file):
+    """
+    Dynamically load a strategy module given the strategy file name and extract its params.
+    """
+    # Get the absolute path of the current file (settings_window.py)
+    current_file_path = Path(__file__).resolve()
+
+    # Get the root directory of the project (IB-Multi-Strategy-ATS)
+    project_root = current_file_path.parent.parent
+
+    # Construct the full path to the strategy file
+    strategy_module_path = project_root / "strategy_manager" / "strategies" / strategy_file
+
+    module_name = strategy_file.split(".")[0]
+    try:
+        spec = importlib.util.spec_from_file_location(module_name, str(strategy_module_path))
+        if spec and spec.loader:
+            strategy_module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(strategy_module)
+            if hasattr(strategy_module, 'PARAMS'):
+                return strategy_module.PARAMS
+            else:
+                print(f"No 'params' found in {module_name}")
+        else:
+            print(f"Module spec not found for {module_name}")
+    except Exception as e:
+        return e
+    
+def update_params_in_db(strategy_symbol, params):
+    lib = ac.get_library('general')
+    strat_df = lib.read("strategies").data
+    print(strat_df)
+    # Update only the 'params' column for the specific strategy
+    if strategy_symbol in strat_df.index:
+        strat_df.at[strategy_symbol, "params"] = str(params)  # Update the params
+        lib.write("strategies", strat_df, metadata={'source': 'manual update'})
+        #lib.update("strategies", strat_df.loc[[strategy_symbol]], metadata={'source': 'manual update'})
+        print(f"Updated params for {strategy_symbol} in the database.")
+    else:
+        print(f"Strategy {strategy_symbol} not found in the database.")
