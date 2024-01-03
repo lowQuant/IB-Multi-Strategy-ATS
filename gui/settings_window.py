@@ -216,14 +216,14 @@ def populate_overview_tab(tab_frame, tab_control):
         Label(tab_frame, text="Name", font=("bold")).grid(row=0, column=1, padx=5, pady=5)
         Label(tab_frame, text="Filename", font=("bold")).grid(row=0, column=2, padx=5, pady=5)
         Label(tab_frame, text="Target Weight", font=("bold")).grid(row=0, column=3, padx=5, pady=5)
-        #Label(tab_frame, text="active", font=("bold")).grid(row=0, column=4, padx=5, pady=5)
+        Label(tab_frame, text="active", font=("bold")).grid(row=0, column=4, padx=5, pady=5)
 
         for index, strategy in enumerate(strategies):
             Label(tab_frame, text=strategy).grid(row=index + 1, column=0, padx=5, pady=5)
             Label(tab_frame, text=df.loc[strategy, 'name']).grid(row=index + 1, column=1, padx=5, pady=5)
             Label(tab_frame, text=df.loc[strategy, 'filename']).grid(row=index + 1, column=2, padx=5, pady=5)
             Label(tab_frame, text=df.loc[strategy, 'target_weight']).grid(row=index + 1, column=3, padx=5, pady=5)
-            
+            Checkbutton(tab_frame, variable=1).grid(row=index + 1, column=4, padx=5, pady=5)
         
         Button(tab_frame, text="Add another Strategy", command=lambda: add_strategy_window(tab_frame)).grid(row=98, column=0, columnspan=3, pady=10, padx=10)
     else:
@@ -323,19 +323,26 @@ def populate_details_tab(tab_frame):
     strategy_dropdown.grid(row=1, column=0, padx=10, pady=5)
 
     strategy_details_frame = Frame(tab_frame)
-    strategy_details_frame.grid(row=1, column=0, padx=5, pady=5)
+    strategy_details_frame.grid(row=3, column=0, padx=5, pady=5)
 
     def on_strategy_select(event):
         # Clear previous details
         for widget in strategy_details_frame.winfo_children():
             widget.destroy()
 
-        strategy_name = selected_strategy.get()
-        if strategy_name:
+        strategy_symbol = selected_strategy.get()
+        if strategy_symbol:
             # Fetch and display strategy details
-            parameters = fetch_strategy_params(strategy_name)
-            for i, (param, value) in enumerate(parameters.items()):
-                Label(strategy_details_frame, text=param).grid(row=i, column=0, padx=5, pady=5)
-                Entry(strategy_details_frame, textvariable=StringVar(value=str(value))).grid(row=i, column=1, padx=5, pady=5)
+            parameters = fetch_strategy_params(strategy_symbol)
+            if parameters and type(parameters) != str:
+                for i, (param, value) in enumerate(parameters.items()):
+                    Label(strategy_details_frame, text=param).grid(row=i, column=0, padx=5, pady=5)
+                    Entry(strategy_details_frame, textvariable=StringVar(value=str(value))).grid(row=i, column=1, padx=5, pady=5)
+            elif type(parameters) == str:
+                Label(strategy_details_frame, text=parameters,
+                      wraplength=380).grid(row=1, rowspan=3,column=0, padx=5, pady=5)
+            else:
+                Label(strategy_details_frame, text="Please add a global PARAMS variable of type <dict> to your strategy.py file",
+                      wraplength=380).grid(row=1, rowspan=3,column=0, padx=5, pady=5)
 
     strategy_dropdown.bind("<<ComboboxSelected>>", on_strategy_select)

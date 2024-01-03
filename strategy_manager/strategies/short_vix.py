@@ -7,6 +7,8 @@ from broker.trademanager import TradeManager
 from broker.functions import get_term_structure
 from gui.log import add_log, start_event
 
+PARAMS = {"target_weight": 0.05, "min_weight":0.02, "max_weight":0.08}
+
 # TODO: # FINISH STRATEGY
         # Assign callbacks for order updates and code the functions in trade_manager which sends updates to strategy_manager
         # trade.fillEvent += self.trade_manager.on_fill
