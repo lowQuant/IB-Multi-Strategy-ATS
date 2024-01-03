@@ -1,7 +1,7 @@
 from tkinter import Toplevel, ttk, Frame, Label, Text, Entry, Button, Checkbutton, IntVar, messagebox, Toplevel, StringVar
 import time
 import pandas as pd
-from data_and_research import ac, fetch_strategies, fetch_strategy_params
+from data_and_research import ac, fetch_strategies, fetch_strategy_params, update_params_in_db, get_strategy_allocation_bounds, update_weights
 
 changes_made = False
 
@@ -198,7 +198,7 @@ def populate_strategies_tab(tab_frame, tab_control):
 
     sub_tab_control.pack(expand=1, fill="both")
 
-    populate_overview_tab(overview_tab, tab_control)
+    populate_overview_tab(overview_tab, details_tab)
     populate_details_tab(details_tab)
 
 # Function to update the overview tab
@@ -207,8 +207,14 @@ def update_overview_tab(tab_frame):
         widget.destroy()
     populate_overview_tab(tab_frame, tab_frame.master)
 
-def populate_overview_tab(tab_frame, tab_control):
+def update_details_tab(details_tab):
+    for widget in details_tab.winfo_children():
+        widget.destroy()
+    populate_details_tab(details_tab)
+
+def populate_overview_tab(tab_frame, details_tab):
     strategies, df = fetch_strategies()  # Assuming this returns a list of strategy names and a DataFrame
+    active_vars = {}
 
     if strategies:
         # Display the existing strategies in a table format
@@ -223,17 +229,28 @@ def populate_overview_tab(tab_frame, tab_control):
             Label(tab_frame, text=df.loc[strategy, 'name']).grid(row=index + 1, column=1, padx=5, pady=5)
             Label(tab_frame, text=df.loc[strategy, 'filename']).grid(row=index + 1, column=2, padx=5, pady=5)
             Label(tab_frame, text=df.loc[strategy, 'target_weight']).grid(row=index + 1, column=3, padx=5, pady=5)
-            Checkbutton(tab_frame, variable=1).grid(row=index + 1, column=4, padx=5, pady=5)
+            active_state = df.loc[strategy, 'active'] == "True"
+            active_var = IntVar(value=int(active_state))
+            active_vars[strategy] = active_var
+            Checkbutton(tab_frame, variable=active_var, command=lambda s=strategy, v=active_var: update_active_state(s, v)).grid(row=index + 1, column=4, padx=5, pady=5)
         
-        Button(tab_frame, text="Add another Strategy", command=lambda: add_strategy_window(tab_frame)).grid(row=98, column=0, columnspan=3, pady=10, padx=10)
+        Button(tab_frame, text="Add another Strategy", command=lambda: add_strategy_window(tab_frame,details_tab)).grid(row=98, column=0, columnspan=3, pady=10, padx=10)
     else:
         Label(tab_frame, text="""
               No Strategies found in the database. 
               Please add a new Strategy.""").grid(row=1, column=0, rowspan=2, columnspan=3, sticky='w', padx=0, pady=5)
         # Add Strategy Button
-        Button(tab_frame, text="Add a Strategy", command=lambda: add_strategy_window(tab_frame)).grid(row=98, column=0, columnspan=3, pady=10, padx=10)
+        Button(tab_frame, text="Add a Strategy", command=lambda: add_strategy_window(tab_frame,details_tab)).grid(row=98, column=0, columnspan=3, pady=10, padx=10)
 
-def add_strategy_window(tab_frame):
+    def update_active_state(strategy_symbol, active_var):
+        new_state = bool(active_var.get())
+        lib = ac.get_library('general')
+        strat_df = lib.read("strategies").data
+        strat_df.loc[strategy_symbol, "active"] = str(new_state)
+        lib.write("strategies", strat_df, metadata={'source': 'gui update'})
+        print(f"Updated 'active' state for {strategy_symbol} to {new_state}")
+
+def add_strategy_window(tab_frame,details_tab):
     new_window = Toplevel()
     new_window.title("Add Strategy")
     new_window.geometry("360x400")
@@ -289,7 +306,8 @@ def add_strategy_window(tab_frame):
             "target_weight": weight_entry.get(),
             'min_weight': min_weight_entry.get(),
             'max_weight': max_weight_entry.get(),
-            'params': ""
+            'params': "",
+            'active': str(True)
         }
 
         # Convert dictionary to DataFrame
@@ -307,6 +325,7 @@ def add_strategy_window(tab_frame):
 
         # ...
         update_overview_tab(tab_frame)  # Refresh the overview tab after saving
+        update_details_tab(details_tab)
         new_window.destroy()
 
     # Exit Button
@@ -318,6 +337,7 @@ def populate_details_tab(tab_frame):
     strategies, _ = fetch_strategies()
     selected_strategy = StringVar()
     entry_widgets = {}  # Dictionary to hold the Entry widgets
+    weight_widgets = {}  # Dictionary to hold weight Entry widgets
 
     Label(tab_frame, text='''Select a Strategy to see Strategy Parameters''').grid(row=0, column=0, columnspan=2, padx=5, pady=5)
     strategy_dropdown = ttk.Combobox(tab_frame, textvariable=selected_strategy, values=strategies)
@@ -331,35 +351,65 @@ def populate_details_tab(tab_frame):
         for widget in strategy_details_frame.winfo_children():
             widget.destroy()
         entry_widgets.clear()  # Reset the dictionary here
+        weight_widgets.clear() 
 
         strategy_symbol = selected_strategy.get()
         if strategy_symbol:
+            # display weights
+            tw, min_w, max_w = get_strategy_allocation_bounds(strategy_symbol)
+            Label(strategy_details_frame, text="target_weight").grid(row=1, column=0, padx=5, pady=5)
+            target_weight_entry = Entry(strategy_details_frame)
+            target_weight_entry.insert(0, str(tw))
+            target_weight_entry.grid(row=1, column=1, padx=5, pady=5)
+            weight_widgets['target_weight'] = target_weight_entry
+
+            Label(strategy_details_frame, text="min_weight").grid(row=2, column=0, padx=5, pady=5)
+            min_weight_entry = Entry(strategy_details_frame)
+            min_weight_entry.insert(0, str(min_w))
+            min_weight_entry.grid(row=2, column=1, padx=5, pady=5)
+            weight_widgets['min_weight'] = min_weight_entry
+
+            Label(strategy_details_frame, text="max_weight").grid(row=3, column=0, padx=5, pady=5)
+            max_weight_entry = Entry(strategy_details_frame)
+            max_weight_entry.insert(0, str(max_w))
+            max_weight_entry.grid(row=3, column=1, padx=5, pady=5)
+            weight_widgets['max_weight'] = max_weight_entry
+
             # Fetch and display strategy details
             parameters = fetch_strategy_params(strategy_symbol)
             if parameters and type(parameters) != str:
+                row = 4
                 for i, (param, value) in enumerate(parameters.items()):
-                    Label(strategy_details_frame, text=param).grid(row=i, column=0, padx=5, pady=5)
+                    Label(strategy_details_frame, text=param).grid(row=row, column=0, padx=5, pady=5)
                     entry = Entry(strategy_details_frame)
                     entry.insert(0, str(value))
-                    entry.grid(row=i, column=1, padx=5, pady=5)
+                    entry.grid(row=row, column=1, padx=5, pady=5)
                     entry_widgets[param] = entry  # Store the Entry widget
+
+                    row += 1
                 
                 # Button for saving changes
-                Button(strategy_details_frame, text="Save Changes", command=save_changes).grid(row=99, column=0, padx=5, pady=5)
+                Button(strategy_details_frame, text="Save Changes", command=lambda: save_changes(strategy_symbol)).grid(row=99, column=0, padx=5, pady=5)
                 Button(strategy_details_frame, text="Delete Strategy", command=lambda: delete_strat(strategy_symbol)).grid(row=99, column=1, padx=5, pady=5)
 
             elif type(parameters) == str:
-                Label(strategy_details_frame, text=parameters, wraplength=380).grid(row=1, rowspan=3, column=0, padx=5, pady=5)
+                Label(strategy_details_frame, text=parameters, wraplength=380).grid(row=4, rowspan=3, column=0, padx=5, pady=5)
                 Button(strategy_details_frame, text="Delete Strategy", command=lambda: delete_strat(strategy_symbol)).grid(row=99, column=0, padx=5, pady=5)
             else:
-                Label(strategy_details_frame, text="Please add a global PARAMS variable of type <dict> to your strategy.py file", wraplength=380).grid(row=1, rowspan=3, column=0, padx=5, pady=5)
+                Label(strategy_details_frame, text="Please add a global PARAMS variable of type <dict> to your strategy.py file", wraplength=380).grid(row=4, rowspan=3, column=0, padx=5, pady=5)
                 Button(strategy_details_frame, text="Delete Strategy", command=lambda: delete_strat(strategy_symbol)).grid(row=99, column=0, padx=5, pady=5)
 
-    def save_changes():
+    def save_changes(strategy_symbol):
+        # Update weights
+        target_weight_value = weight_widgets['target_weight'].get()
+        min_weight_value = weight_widgets['min_weight'].get()
+        max_weight_value = weight_widgets['max_weight'].get()
+        update_weights(strategy_symbol,target_weight_value,min_weight_value, max_weight_value)
+
         # Retrieve values directly from Entry widgets and save changes
         updated_parameters = {param: entry.get() for param, entry in entry_widgets.items()}
-        print(updated_parameters)
-    
+        update_params_in_db(strategy_symbol,updated_parameters)
+  
     def delete_strat(strategy_symbol):
         print(f"Deleting {strategy_symbol}")
 

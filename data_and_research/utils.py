@@ -128,3 +128,27 @@ def update_params_in_db(strategy_symbol, params):
         print(f"Updated params for {strategy_symbol} in the database.")
     else:
         print(f"Strategy {strategy_symbol} not found in the database.")
+
+def get_strategy_allocation_bounds(strategy_symbol):
+    lib = ac.get_library('general')
+    strat_df = lib.read("strategies").data
+    if strategy_symbol in strat_df.index:
+        target_weight = strat_df.loc[strategy_symbol, "target_weight"]
+        min_weight = strat_df.loc[strategy_symbol, "min_weight"]
+        max_weight = strat_df.loc[strategy_symbol, "max_weight"]
+        print(f"The Allocation bounds are target:{target_weight}, min:{min_weight}, max:{max_weight}")
+        return float(target_weight), float(min_weight), float(max_weight)
+    else:
+        print(f"Strategy {strategy_symbol} not found in the database.")
+
+def update_weights(strategy_symbol,target_weight,min_weight,max_weight):
+    lib = ac.get_library('general')
+    strat_df = lib.read("strategies").data
+    if strategy_symbol in strat_df.index:
+        strat_df.at[strategy_symbol, "target_weight"] = str(target_weight) 
+        strat_df.at[strategy_symbol, "min_weight"] = str(min_weight)
+        strat_df.at[strategy_symbol, "max_weight"] = str(max_weight)
+        lib.write("strategies", strat_df, metadata={'source': 'manual update'})
+        print(f"Updated weights for {strategy_symbol} in the database.")
+    else:
+        print(f"Strategy {strategy_symbol} not found in the database.")

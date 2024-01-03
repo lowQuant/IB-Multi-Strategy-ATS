@@ -3,11 +3,12 @@ from ib_insync import *
 import pandas as pd
 import numpy as np
 import datetime
+from data_and_research import get_strategy_allocation_bounds
 from broker.trademanager import TradeManager
 from broker.functions import get_term_structure
 from gui.log import add_log, start_event
 
-PARAMS = {"target_weight": 0.05, "min_weight":0.02, "max_weight":0.08}
+PARAMS = {"VIX Threshold": 16, "Contango":True}
 
 # TODO: # FINISH STRATEGY
         # Assign callbacks for order updates and code the functions in trade_manager which sends updates to strategy_manager
@@ -20,7 +21,7 @@ class VRP:
         self.strategy_manager = strategy_manager
         self.trade_manager = trade_manager
 
-        self.strategy_symbol = "SVRP"
+        self.strategy_symbol = "SVIX"
         self.SPY_yfTicker = "^GSPC"
         self.VIX_yfTicker = "^VIX"
         self.instrument_symbol = "VXM"
@@ -33,8 +34,8 @@ class VRP:
         # Position Management
         self.update_investment_status()
         self.update_invested_contract()
-        self.min_weight, self.target_weight, self.max_weight = 0.04, 0.07, 0.1
-        # self.target_weight, self.min_weight, self.max_weight = hp.get_allocation_allowance(self.strategy_symbol)
+        #self.min_weight, self.target_weight, self.max_weight = 0.04, 0.07, 0.1
+        self.target_weight, self.min_weight, self.max_weight = get_strategy_allocation_bounds(self.strategy_symbol)
        
     @staticmethod
     def check_investment_weight(self, symbol):
