@@ -343,7 +343,7 @@ def populate_details_tab(tab_frame):
                     entry.insert(0, str(value))
                     entry.grid(row=i, column=1, padx=5, pady=5)
                     entry_widgets[param] = entry  # Store the Entry widget
-                
+                1
                 # Button for saving changes
                 Button(strategy_details_frame, text="Save Changes", command=save_changes).grid(row=99, column=0, padx=5, pady=5)
                 Button(strategy_details_frame, text="Delete Strategy", command=lambda: delete_strat(strategy_symbol)).grid(row=99, column=1, padx=5, pady=5)
