@@ -4,7 +4,7 @@ from gui.log import add_log, start_event
 from ib_insync import *
 import time, asyncio
 
-PARAMS = {"target_weight": 0.05, "min_weight":0.02, "max_weight":0.08}
+PARAMS = {}
 
 class Strategy:
     def __init__(self, ib_client,strategy_manager,trade_manager):
