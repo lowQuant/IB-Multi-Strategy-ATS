@@ -4,11 +4,14 @@ import pandas as pd
 from data_and_research import ac, fetch_strategies, fetch_strategy_params, update_params_in_db, get_strategy_allocation_bounds, update_weights
 
 changes_made = False
+overview_tab = None
+details_tab = None
 
 def get_settings_from_db():
     lib = ac.get_library("general")
     df = lib.read("settings").data
     settings_dict = df.to_dict()
+    
     return settings_dict['Value']
 
 def open_settings_window(main_window):
@@ -189,6 +192,8 @@ def exit_settings(settings_window):
         settings_window.master.destroy()
 
 def populate_strategies_tab(tab_frame, tab_control):
+    global overview_tab
+    global details_tab
     sub_tab_control = ttk.Notebook(tab_frame)
     overview_tab = Frame(sub_tab_control)
     details_tab = Frame(sub_tab_control)
@@ -197,7 +202,7 @@ def populate_strategies_tab(tab_frame, tab_control):
     sub_tab_control.add(details_tab, text='Strategy Details')
 
     sub_tab_control.pack(expand=1, fill="both")
-
+    
     populate_overview_tab(overview_tab, details_tab)
     populate_details_tab(details_tab)
 
@@ -393,10 +398,10 @@ def populate_details_tab(tab_frame):
                 Button(strategy_details_frame, text="Delete Strategy", command=lambda: delete_strat(strategy_symbol)).grid(row=99, column=1, padx=5, pady=5)
 
             elif type(parameters) == str:
-                Label(strategy_details_frame, text=parameters, wraplength=380).grid(row=4, rowspan=3, column=0, padx=5, pady=5)
+                Label(strategy_details_frame, text=parameters, wraplength=380).grid(row=4, rowspan=3, columnspan=2 ,column=0, padx=5, pady=5)
                 Button(strategy_details_frame, text="Delete Strategy", command=lambda: delete_strat(strategy_symbol)).grid(row=99, column=0, padx=5, pady=5)
             else:
-                Label(strategy_details_frame, text="Please add a global PARAMS variable of type <dict> to your strategy.py file", wraplength=380).grid(row=4, rowspan=3, column=0, padx=5, pady=5)
+                Label(strategy_details_frame, text="Please add a global PARAMS variable of type <dict> to your strategy.py file", wraplength=380).grid(row=4, rowspan=3, column=0,columnspan=2, padx=5, pady=5)
                 Button(strategy_details_frame, text="Delete Strategy", command=lambda: delete_strat(strategy_symbol)).grid(row=99, column=0, padx=5, pady=5)
 
     def save_changes(strategy_symbol):
@@ -411,6 +416,29 @@ def populate_details_tab(tab_frame):
         update_params_in_db(strategy_symbol,updated_parameters)
   
     def delete_strat(strategy_symbol):
-        print(f"Deleting {strategy_symbol}")
+        # Ask for confirmation before deletion
+        response = messagebox.askyesno("WARNING", f"Are you sure you want to delete the strategy '{strategy_symbol}'?")
+        if response:
+            try:
+                # Proceed with deletion
+                lib = ac.get_library('general')
+                strat_df = lib.read("strategies").data
+
+                # Check if the strategy exists in the DataFrame
+                if strategy_symbol in strat_df.index:
+                    # Delete the strategy
+                    strat_df = strat_df.drop(strategy_symbol)
+                    lib.write("strategies", strat_df, metadata={'source': 'gui delete'})
+                    messagebox.showinfo("Success", f"Strategy '{strategy_symbol}' has been successfully deleted.")
+
+                    # Update the Strategy tabs
+                    update_overview_tab(tab_frame)  # Refresh the overview tab after saving
+                    update_details_tab(details_tab)
+                else:
+                    messagebox.showerror("Error", f"Strategy '{strategy_symbol}' not found in the database.")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to delete strategy: {e}")
+        else:
+            print(f"Deletion cancelled for {strategy_symbol}")
 
     strategy_dropdown.bind("<<ComboboxSelected>>", on_strategy_select)

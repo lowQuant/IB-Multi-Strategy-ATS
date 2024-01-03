@@ -133,13 +133,19 @@ def get_strategy_allocation_bounds(strategy_symbol):
     lib = ac.get_library('general')
     strat_df = lib.read("strategies").data
     if strategy_symbol in strat_df.index:
-        target_weight = strat_df.loc[strategy_symbol, "target_weight"]
-        min_weight = strat_df.loc[strategy_symbol, "min_weight"]
-        max_weight = strat_df.loc[strategy_symbol, "max_weight"]
+        try:
+            target_weight = strat_df.loc[strategy_symbol, "target_weight"] or 0
+            min_weight = strat_df.loc[strategy_symbol, "min_weight"] or 0
+            max_weight = strat_df.loc[strategy_symbol, "max_weight"] or 0
+        except ValueError:
+            print(f"Invalid weight values for strategy {strategy_symbol}")
+            return 0.0, 0.0, 0.0  # Default values
+
         print(f"The Allocation bounds are target:{target_weight}, min:{min_weight}, max:{max_weight}")
         return float(target_weight), float(min_weight), float(max_weight)
     else:
         print(f"Strategy {strategy_symbol} not found in the database.")
+        return 0.0, 0.0, 0.0  # Default values
 
 def update_weights(strategy_symbol,target_weight,min_weight,max_weight):
     lib = ac.get_library('general')
