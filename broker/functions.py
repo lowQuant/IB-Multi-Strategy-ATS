@@ -48,7 +48,7 @@ def get_term_structure(future_symbol,index_symbol, exchange=None, yf = False, ib
         ib.sleep(1)
 
         # Set market data type to delayed frozen data
-        ib.reqMarketDataType(3)
+        ib.reqMarketDataType(4)
 
         if yf:
             spot = get_index_spot(index_symbol)
@@ -57,7 +57,7 @@ def get_term_structure(future_symbol,index_symbol, exchange=None, yf = False, ib
             idx = Index(index_symbol)
             ib.qualifyContracts(idx)
             idx_details = ib.reqMktData(idx)
-            ib.sleep(2)
+            ib.sleep(5)
             spot = idx_details.last
 
         futures_data = {
