@@ -4,17 +4,17 @@ from gui.log import add_log, start_event
 import time
 
 class Strategy:
-    def __init__(self, ib_client):
+    def __init__(self,ib_client,strategy_manager,trade_manager):
         self.ib = ib_client
 
     def run(self):
         add_log("Strategy2 Thread Started")
         start_event.wait()
         
-        while start_event.is_set():
-            add_log("Executing Strategy 2")
-            time.sleep(4)
-            add_log("S2: Listening to market data")
+        # while start_event.is_set():
+        #     add_log("Executing Strategy 2")
+        #     time.sleep(4)
+        #     add_log("S2: Listening to market data")
 
     def stop(self):
         # Hier Logik zum Stoppen der Strategie hinzufügen

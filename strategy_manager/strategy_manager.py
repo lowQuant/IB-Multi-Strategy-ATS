@@ -26,9 +26,11 @@ class StrategyManager:
         '''loads all strategies that the user added via the Settings/Strategies Menu'''
         strategy_dir = "strategy_manager/strategies"
         strategy_names, self.strategy_df = fetch_strategies()
-        
+        active_filenames = set(self.strategy_df[self.strategy_df["active"] == "True"]['filename'])
+
         if strategy_names:
-            strategy_files = [f for f in self.strategy_df['filename'] if f in os.listdir(strategy_dir)]
+            # strategy_files = [f for f in self.strategy_df['filename'] if f in os.listdir(strategy_dir)]
+            strategy_files = [f for f in self.strategy_df['filename'] if f in os.listdir(strategy_dir) and f in active_filenames]
             for file in strategy_files:
                 
                 # print([f for f in self.strategy_df['filename']])

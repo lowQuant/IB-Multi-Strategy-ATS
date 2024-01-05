@@ -2,7 +2,7 @@ import yfinance as yf
 from ib_insync import *
 import pandas as pd
 import numpy as np
-import datetime
+import datetime, time
 from data_and_research import get_strategy_allocation_bounds
 from broker.trademanager import TradeManager
 from broker.functions import get_term_structure
@@ -15,7 +15,7 @@ PARAMS = {"VIX Threshold": 16, "Contango":True}
         # trade.fillEvent += self.trade_manager.on_fill
         # trade.statusEvent += self.trade_manager.on_status_change 
 
-class VRP:
+class Strategy:
     def __init__(self,ib,strategy_manager,trade_manager):
         self.ib = ib
         self.strategy_manager = strategy_manager
@@ -174,6 +174,18 @@ class VRP:
                 if rebal_amount:
                     print(f"We need to change our positioning by {rebal_amount} contracts")
                     self.trade_manager.trade(self,current_contract,rebal_amount*-1)
+    
+    def run(self):
+        add_log(f"Strategy2 Thread Started")
+        start_event.wait()
+        add_log(f"{self.term_structure}")
+        # while start_event.is_set():
+        #     add_log("Executing Strategy 2")
+        #     time.sleep(4)
+        #     add_log("S2: Listening to market data")
+        #     time.sleep(4)
+        #     add_log(f"S2: Weight:{self.current_weight}")
+        #     add_log(f"S2: VXM Future in contango: {self.is_contango}")
 
     def update_investment_status(self):
         """ Update the investment status of the strategy """
