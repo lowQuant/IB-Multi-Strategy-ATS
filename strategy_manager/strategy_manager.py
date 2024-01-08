@@ -23,7 +23,8 @@ class StrategyManager:
         self.load_strategies()
 
     def load_strategies(self):
-        '''loads all strategies that the user added via the Settings/Strategies Menu'''
+        '''loads all active strategies that the user added via the Settings/Strategies Menu
+            & stores them in self.strategies'''
         strategy_dir = "strategy_manager/strategies"
         strategy_names, self.strategy_df = fetch_strategies()
         active_filenames = set(self.strategy_df[self.strategy_df["active"] == "True"]['filename'])
@@ -64,7 +65,6 @@ class StrategyManager:
                 self.strategy_threads.append(thread)
             else:
                 print(f"Strategy {type(strategy).__name__} does not have a run method.")
-
 
     def process_messages(self):
         while True:

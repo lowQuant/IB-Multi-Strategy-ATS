@@ -6,12 +6,12 @@ import talib
 
 try:
     from data_and_research import ac
-    lib = ac.get_library('general', create_if_missing=True)
+    lib = ac.get_library('stocks', create_if_missing=True)
 except:
     from utils import ac
-    lib = ac.get_library('general', create_if_missing=True)
+    lib = ac.get_library('stocks', create_if_missing=True)
 
-print(lib.list_symbols())
+
 def is_last_business_day_in_df(df):
     """
     Check if the last business day is in the DataFrame's index.
@@ -32,3 +32,4 @@ def is_last_business_day_in_df(df):
 
     # Check if the last business day is in the DataFrame's index
     return last_business_day.normalize() in df.index
+
