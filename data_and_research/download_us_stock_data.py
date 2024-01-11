@@ -26,7 +26,7 @@ print(f"Splitting symbols into {len(chunked_symbols)} chunks.")
 
 # Function to download and store data
 def download_and_store(chunk):
-    data = yf.download(symbols, group_by="Ticker", period="3y", auto_adjust=True)
+    data = yf.download(chunk, group_by="Ticker", period="3y", auto_adjust=True)
 
     df = data.stack(level=0).rename_axis(['Date', 'Symbol']).reset_index(level=1)
     df = df.sort_values(by='Symbol',axis='index',kind='stable').drop(axis=1,columns="Adj Close")

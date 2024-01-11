@@ -73,3 +73,4 @@ class TradingViewSymbols(webdriver.Firefox):
 if __name__ == '__main__':
     TradingViewBot = TradingViewSymbols()
     df = TradingViewBot.scrape_data()
+    TradingViewBot.quit()
