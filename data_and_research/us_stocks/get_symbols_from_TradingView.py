@@ -66,7 +66,7 @@ class TradingViewSymbols(webdriver.Firefox):
                 data.append(row_data)
 
         self.df = pd.DataFrame(data, columns=headers)
-        self.df.to_csv("symbols.csv")
+        self.df.to_csv("symbols.csv",header=0)
         return self.df
 
 

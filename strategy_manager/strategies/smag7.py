@@ -8,10 +8,10 @@ from gui.log import add_log, start_event
 
 # Global parameters that can be adjusted in the settings menu
 PARAMS = {
-    "Moving Average": {'description':'The signal to short a magnificient seven stock','value':50},
-    "ATR length": {'description':'The number of days to compute the ATR for Stop Loss Level calculation','value':20},
-    "ATR Multiplier":{'description':'Factor to specify stop loss level','value':3},
-    "Position Sizing":{'description':'Factor to specify stop loss level','value':3},
+    "Moving Average": 50,
+    "ATR length": 20,
+    "ATR Multiplier":3,
+    "Position Sizing":-0.05,
     "Universe": ["AAPL", "MSFT", "GOOGL", "AMZN", "META", "TSLA", "NFLX"]  # Replace with actual symbols of "Magnificent Seven"
 }
 

@@ -13,17 +13,6 @@ class Strategy:
         self.strategy_manager = strategy_manager
         self.trade_manager = trade_manager
 
-    # def on_updates(self, trade: Trade, update: str):
-    #     if trade.orderStatus.status == 'Filled':
-    #         # Handle filled order
-    #         trade_details = await self.get_trade_details(trade)
-    #         self.strategy_manager.notify_trade_update(self.strategy_symbol, trade_details)
-
-    #     elif trade.orderStatus.status in ['Submitted', 'PreSubmitted']:
-    #         # Handle order submission
-    #         self.strategy_manager.notify_order_placement(self.strategy_symbol, trade)
-    #         add_log(f"{trade}")
-
     def run(self):
         # Uncomment below if async functions are called
         loop = asyncio.new_event_loop()
@@ -53,26 +42,6 @@ class Strategy:
         finally:
             loop.close()
         
-        # try:
-        #     add_log("Strategy SVIX Thread Started")
-        # except Exception as e:
-        #     add_log(f"Error in SVIX run method: {e}")
-        
-        # add_log(f"S1: Buying 10 shares AAPL")
-        # contract = Stock('AAPL', 'SMART', 'USD')
-        # order = MarketOrder('BUY', 10)
-        # order.orderRef = self.strategy_symbol
-        # add_log(f"{order}")
-        # trade = self.ib.placeOrder(contract, order)
-        # self.ib.sleep(3)
-        # #self.strategy_manager.message_queue.put({'type': 'status_change','strategy': 'AsyncStrategy','trade': trade,'status': trade.orderStatus.status})
-
-        # # Assign callbacks for order updates
-        # trade.fillEvent += self.on_fill
-        # trade.statusEvent += self.on_status_change
-
-        # self.ib.sleep(3)
-
     def on_fill(self, trade, fill):
         # Handle fill event
         self.strategy_manager.message_queue.put({
@@ -90,6 +59,10 @@ class Strategy:
             'trade': trade,
             'status': trade.orderStatus.status
         })
+
+    def stop(self):
+        # Hier Logik zum Stoppen der Strategie hinzufügen
+        pass
     
         # self.strategy_manager.message_queue.put({
         #     'type': 'order',
@@ -109,10 +82,21 @@ class Strategy:
         #     add_log(f"S1: Buying 10 shares AAPL")
         #     time.sleep(3)
 
-    def stop(self):
-        # Hier Logik zum Stoppen der Strategie hinzufügen
-        pass
+ 
 
 # def run(ib):
 #     strategy = Strategy(ib)
 #     strategy.run()
+    
+
+
+    # def on_updates(self, trade: Trade, update: str):
+    #     if trade.orderStatus.status == 'Filled':
+    #         # Handle filled order
+    #         trade_details = await self.get_trade_details(trade)
+    #         self.strategy_manager.notify_trade_update(self.strategy_symbol, trade_details)
+
+    #     elif trade.orderStatus.status in ['Submitted', 'PreSubmitted']:
+    #         # Handle order submission
+    #         self.strategy_manager.notify_order_placement(self.strategy_symbol, trade)
+    #         add_log(f"{trade}")
