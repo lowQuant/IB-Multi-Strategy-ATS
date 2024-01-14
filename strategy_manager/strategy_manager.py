@@ -21,6 +21,8 @@ class StrategyManager:
         self.message_processor_thread.start()
 
         self.load_strategies()
+        #TODO: only start ocne all strategies are loaded
+        #TODO: load data before
 
     def load_strategies(self):
         '''loads all active strategies that the user added via the Settings/Strategies Menu

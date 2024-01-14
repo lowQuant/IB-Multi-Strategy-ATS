@@ -337,7 +337,6 @@ def add_strategy_window(tab_frame,details_tab):
     Button(new_window, text="Save & Exit", command=save_and_exit).grid(row=98, column=0, padx=5, pady=5)
     Button(new_window, text="Cancel", command=new_window.destroy).grid(row=98, column=1, padx=5, pady=5)
     
-
 def populate_details_tab(tab_frame):
     strategies, _ = fetch_strategies()
     selected_strategy = StringVar()
