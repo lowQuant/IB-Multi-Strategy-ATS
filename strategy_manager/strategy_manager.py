@@ -5,14 +5,13 @@ import os, queue, asyncio
 import threading
 from data_and_research.utils import fetch_strategies
 from gui.log import add_log
-from broker.trademanager import TradeManager
+import broker.trade as broker
 
 class StrategyManager:
     def __init__(self, ib_client):
         self.ib_client = ib_client
         self.strategy_threads = []
         self.strategies = []
-        self.trade_manager = TradeManager(ib_client=ib_client)
 
         # Create a queue for thread safe editing of shared resources (e.g. updating available cash etc.)
         self.message_queue = queue.Queue()
@@ -49,7 +48,7 @@ class StrategyManager:
 
                     if hasattr(module, 'Strategy'):
                         print(f"Instantiating strategy: {module_name}")
-                        strategy_instance = module.Strategy(self.ib_client, self, self.trade_manager)
+                        strategy_instance = module.Strategy(self.ib_client, self)
                         self.strategies.append(strategy_instance)
                     else:
                         print(f"No 'Strategy' class found in {module_name}")
