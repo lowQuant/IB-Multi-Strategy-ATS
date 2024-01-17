@@ -1,19 +1,12 @@
 # strategy_manager/strategy_manager.py
 
 import importlib.util
-import os, queue, asyncio
+import os, queue
 import threading
-from multiprocessing import Process
 from data_and_research.utils import fetch_strategies
 from gui.log import add_log
 from broker import connect_to_IB,disconnect_from_IB
 import broker.trade as broker
-
-import multiprocessing as mp
-import dill
-
-mp.context._default_context = mp.get_context()
-mp.context._default_context.reducer = dill
 
 class StrategyManager:
     def __init__(self):
