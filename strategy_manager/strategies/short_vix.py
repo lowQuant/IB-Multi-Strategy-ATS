@@ -3,7 +3,7 @@ from ib_insync import *
 import pandas as pd
 import numpy as np
 import datetime, time, asyncio
-from data_and_research import get_strategy_allocation_bounds
+from data_and_research import get_strategy_allocation_bounds, get_strategy_symbol
 import broker.trade as broker
 from broker import connect_to_IB, disconnect_from_IB
 from broker.functions import get_term_structure
@@ -45,8 +45,8 @@ class Strategy:
     def __init__(self, client_id, strategy_manager):
         self.client_id = client_id
         self.strategy_manager = strategy_manager
-
-        self.strategy_symbol = "SVIX"
+        self.filename = self.__class__.__module__ +".py"
+        self.strategy_symbol = get_strategy_symbol(self.filename)
         self.SPY_yfTicker = "^GSPC"
         self.VIX_yfTicker = "^VIX"
         self.instrument_symbol = "VXM"

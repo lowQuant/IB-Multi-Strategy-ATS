@@ -129,6 +129,16 @@ def update_params_in_db(strategy_symbol, params):
     else:
         print(f"Strategy {strategy_symbol} not found in the database.")
 
+def get_strategy_symbol(filename):
+    try:
+        lib = ac.get_library('general')
+        df = lib.read("strategies").data
+        symbol = df[df.filename == filename].index.item()  # Using .item() to get the actual symbol
+        return symbol
+    except Exception as e:
+        print(f"Error retrieving strategy symbol: {e}")
+        return None
+
 def get_strategy_allocation_bounds(strategy_symbol):
     lib = ac.get_library('general')
     strat_df = lib.read("strategies").data
