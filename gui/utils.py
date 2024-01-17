@@ -12,7 +12,6 @@ from .log import add_log, start_event
 # Global variables for strategy threads
 strategy_threads = []
 jupyter_subprocess = None
-ib_client = None
 
 # consider deleting
 def load_strategy(strategy_name):
@@ -30,27 +29,21 @@ def load_strategy(strategy_name):
     return strategy_module
 
 def start_trading(stop_button, start_button, window, start_event):
-    global strategy_manager, ib_client
-    ib_client = connect_to_IB()
-    if ib_client:
-        start_event.set()
-        strategy_manager = StrategyManager(ib_client)
-        strategy_manager.start_all()
+    global strategy_manager
+    
+    start_event.set()
+    strategy_manager = StrategyManager()
+    strategy_manager.start_all()
 
-        stop_button.place(x=48.0, y=79.0, width=178.0, height=58.0)  # Show 'Stop Trading' button
-        start_button.place_forget()  # Hide 'Start Trading' button
-        window.update_idletasks()  # Update the window to reflect changes
-    else:
-        # If connection fails, update the log
-        pass
-        #add_log("""Make sure TWS or IB Gateway is running/ you are using the correct port""")
-        
+    stop_button.place(x=48.0, y=79.0, width=178.0, height=58.0)  # Show 'Stop Trading' button
+    start_button.place_forget()  # Hide 'Start Trading' button
+    window.update_idletasks()  # Update the window to reflect changes
+    
 def stop_trading(stop_button, start_button, window):
     global strategy_manager
     if strategy_manager:
         start_event.clear()
-        disconnect_from_IB()
-        # strategy_manager.stop_all()
+        strategy_manager.disconnect()
     
     start_button.place(x=48.0, y=79.0, width=178.0, height=58.0)  # Show 'Start Trading' button
     stop_button.place_forget()  # Hide 'Stop Trading' button

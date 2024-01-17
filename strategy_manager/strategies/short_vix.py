@@ -2,9 +2,10 @@ import yfinance as yf
 from ib_insync import *
 import pandas as pd
 import numpy as np
-import datetime, time
+import datetime, time, asyncio
 from data_and_research import get_strategy_allocation_bounds
 import broker.trade as broker
+from broker import connect_to_IB, disconnect_from_IB
 from broker.functions import get_term_structure
 from gui.log import add_log, start_event
 
@@ -15,9 +16,34 @@ PARAMS = {"VIX Threshold": 16, "Contango":True}
         # trade.fillEvent += self.trade_manager.on_fill
         # trade.statusEvent += self.trade_manager.on_status_change 
 
+strategy = None
+
+def manage_strategy(client_id, strategy_manager):
+    try:
+        # Create a new event loop for this thread
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        # Instantiate the Strategy class
+        global strategy
+        strategy = Strategy(client_id, strategy_manager)
+        strategy.run()
+
+    except Exception as e:
+        # Handle exceptions
+        print(f"Error when instantiating: {e}")
+
+    finally:
+        # Clean up
+        disconnect_from_IB(strategy.ib, strategy.strategy_symbol)
+        loop.close()
+
+def disconnect():
+    strategy.disconnect()
+    
 class Strategy:
-    def __init__(self,ib,strategy_manager):
-        self.ib = ib
+    def __init__(self, client_id, strategy_manager):
+        self.client_id = client_id
         self.strategy_manager = strategy_manager
 
         self.strategy_symbol = "SVIX"
@@ -26,6 +52,7 @@ class Strategy:
         self.instrument_symbol = "VXM"
 
         # Get Data on Strategy Initialization
+        self.ib = connect_to_IB(clientid=self.client_id, symbol=self.strategy_symbol)
         self.term_structure = get_term_structure(self.instrument_symbol,"VIX",ib=self.ib)
         self.volatility_risk_premium = self.download_vix_and_spy_data()["VRP"].iloc[-1]
         self.is_contango = self.is_contango()
@@ -175,8 +202,7 @@ class Strategy:
                     broker.trade(self.ib,current_contract,rebal_amount*-1)
     
     def run(self):
-        add_log(f"Strategy2 Thread Started")
-        start_event.wait()
+        add_log(f"{self.strategy_symbol} Thread Started")
         add_log(f"{self.term_structure}")
         # while start_event.is_set():
         #     add_log("Executing Strategy 2")
@@ -185,6 +211,10 @@ class Strategy:
         #     time.sleep(4)
         #     add_log(f"S2: Weight:{self.current_weight}")
         #     add_log(f"S2: VXM Future in contango: {self.is_contango}")
+
+    def disconnect(self):
+        # Disconnect logic for the IB client
+        disconnect_from_IB(ib=self.ib,symbol=self.strategy_symbol)
 
     def update_investment_status(self):
         """ Update the investment status of the strategy """
@@ -275,3 +305,6 @@ class Strategy:
     def close_position(self, contract):
         """ Close the position in the given future contract """
         # Code for closing the position...
+
+if __name__ == '__main__':
+    print("main")
