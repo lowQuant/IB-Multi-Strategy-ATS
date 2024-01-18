@@ -1,6 +1,6 @@
 from ib_insync import *
 import asyncio
-import broker.trade as broker
+from broker.trademanager import TradeManager
 from broker import connect_to_IB, disconnect_from_IB
 from data_and_research import get_strategy_allocation_bounds, get_strategy_symbol
 from gui.log import add_log
@@ -40,6 +40,7 @@ class Strategy:
         
         # Get Data on Strategy Initialization
         self.ib = connect_to_IB(clientid=self.client_id, symbol=self.strategy_symbol)
+        self.trade_manager = TradeManager(self.ib)
         
         # Position Management
         self.update_investment_status()
