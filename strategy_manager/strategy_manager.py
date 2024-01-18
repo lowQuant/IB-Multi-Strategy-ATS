@@ -69,13 +69,6 @@ class StrategyManager:
          # Disconnecting the StrategyManager itself
         disconnect_from_IB(ib=self.ib_client)
 
-    def stop_all(self):
-        # Implement logic to gracefully stop all strategies
-        for strategy in self.strategies:
-            strategy.stop()  # Assuming each strategy has a stop method
-        for thread in self.strategy_threads:
-            thread.join(timeout=5)
-
     def process_messages(self):
         while True:
             message = self.message_queue.get(block=True)
