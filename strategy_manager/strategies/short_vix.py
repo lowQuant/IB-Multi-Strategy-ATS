@@ -4,12 +4,12 @@ import pandas as pd
 import numpy as np
 import datetime, time, asyncio
 from data_and_research import get_strategy_allocation_bounds, get_strategy_symbol
-import broker.trade as broker
+from broker.trademanager import TradeManager
 from broker import connect_to_IB, disconnect_from_IB
 from broker.functions import get_term_structure
 from gui.log import add_log, start_event
 
-PARAMS = {"VIX Threshold": 16, "Contango":True}
+PARAMS = {"VIX Threshold": 16.5, "Contango":True}
 
 # TODO: # FINISH STRATEGY
         # Assign callbacks for order updates and code the functions in trade_manager which sends updates to strategy_manager
@@ -28,10 +28,9 @@ def manage_strategy(client_id, strategy_manager):
         global strategy
         strategy = Strategy(client_id, strategy_manager)
         strategy.run()
-
     except Exception as e:
         # Handle exceptions
-        print(f"Error when instantiating: {e}")
+        print(f"Error in {strategy.strategy_symbol}: {e}")
 
     finally:
         # Clean up
@@ -53,6 +52,8 @@ class Strategy:
 
         # Get Data on Strategy Initialization
         self.ib = connect_to_IB(clientid=self.client_id, symbol=self.strategy_symbol)
+        self.trade_manager = TradeManager(ib_client=self.ib)
+
         self.term_structure = get_term_structure(self.instrument_symbol,"VIX",ib=self.ib)
         self.volatility_risk_premium = self.download_vix_and_spy_data()["VRP"].iloc[-1]
         self.is_contango = self.is_contango()
@@ -185,7 +186,7 @@ class Strategy:
             if dte <= 5:
                 new_contract = self.get_next_contract(current_contract)
                 if new_contract:
-                    broker.roll_future(self.ib,current_contract, new_contract, orderRef=self.strategy_symbol)
+                    self.trade_manager.roll_future(current_contract, new_contract, orderRef=self.strategy_symbol)
             
             # check if we need to rebalance, because we are out of investment limits
             if self.min_weight < self.current_weight or self.current_weight > self.max_weight:
@@ -199,11 +200,11 @@ class Strategy:
 
                 if rebal_amount:
                     print(f"We need to change our positioning by {rebal_amount} contracts")
-                    broker.trade(self.ib,current_contract,rebal_amount*-1)
+                    self.trade_manager.trade(current_contract,rebal_amount*-1)
     
     def run(self):
         add_log(f"{self.strategy_symbol} Thread Started")
-        add_log(f"{self.term_structure}")
+        self.check_conditions_and_trade()
         # while start_event.is_set():
         #     add_log("Executing Strategy 2")
         #     time.sleep(4)
@@ -267,7 +268,8 @@ class Strategy:
             contract_price = self.get_contract_price(contract)
             multiplier = int(contract.multiplier)
             quantity = self.calculate_number_of_contracts(allocated_amount,contract_price,multiplier)
-            broker.trade(self.ib,contract,quantity)
+            print(f"Shorting {quantity} {contract.localSymbol}")
+            self.trade_manager.trade(contract,quantity)
         else:
             add_log(f"Insufficient Cash to run strategy{self.strategy_symbol}")
 
@@ -298,7 +300,7 @@ class Strategy:
             :param orderRef: Reference identifier for the order.
         """
         if self.get_dte(current_contract) < self.get_dte(new_contract):
-            broker.roll_future(self.ib,current_contract,new_contract,orderRef)
+            self.trade_manager.roll_future(current_contract,new_contract,orderRef)
         else:
             add_log("Not allowed to roll future down the curve")
 
