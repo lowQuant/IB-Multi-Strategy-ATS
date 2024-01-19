@@ -2,14 +2,43 @@ import tkinter as tk
 from tkinter import ttk
 from data_and_research import ac, fetch_strategies
 
+def on_combobox_select(event, tree, row_id):
+    strategy = event.widget.get()
+    print("select fct called")
+    symbol = tree.set(row_id, 'symbol')
+    row = tree.set(row_id)
+    print(row)
+    print(strategy,symbol)
+
+def build_strategy_combobox(window, tree, strategies, row_id):
+    # Column index for the strategy column
+    strategy_column_index = "#5"
+    
+    # Check if the bounding box can be retrieved, otherwise return
+    bbox = tree.bbox(row_id, strategy_column_index)
+    if not bbox:
+        print(f"Could not get bbox for row: {row_id}")
+        return None
+    
+    x, y, width, height = bbox
+    pady = height // 2
+
+    # Create a Combobox widget with the list of strategies
+    strategy_cb = ttk.Combobox(window, values=strategies)
+    strategy_cb.place(x=x, y=y+pady, anchor="w", width=width)
+    strategy_cb.set("")  # Placeholder text
+
+    # Bind the Combobox to the assign_strategy function when a selection is made
+    strategy_cb.bind("<<ComboboxSelected>>", lambda e: on_combobox_select(e, tree, row_id))
+    return strategy_cb  # Return the combobox to manage it later if needed
+
 def open_portfolio_window(ib):
     window = tk.Toplevel()
     window.title("Portfolio")
     window.geometry("600x400")
 
-    # Assuming get_portfolio_data() fetches data from IB and returns a list of dictionaries
-    portfolio_data = get_portfolio_data(ib)
-    strategies,strat_df = fetch_strategies()  # Fetch list of strategies
+    portfolio_data = get_portfolio_data(ib)  # Fetch the data
+    strategies, strat_df = fetch_strategies()  # Fetch list of strategies
 
     # Add a scrollbar
     scrollbar = tk.Scrollbar(window)
@@ -22,13 +51,22 @@ def open_portfolio_window(ib):
 
     # Define the column headings
     for col in columns:
-        tree.column(col, stretch=tk.YES, minwidth=0, width=60)  # Enable stretching, set a min width and a proportional initial width
+        tree.column(col, stretch=tk.YES, minwidth=0, width=100)  # Adjust the width as needed
         tree.heading(col, text=col.capitalize())
 
     # Adding data to the treeview
     for item in portfolio_data:
+        #!  TODO: WRITE A FUNCTION: match_position_with_db
+        # in this function it will check the db for an entry in the symbol and asset class
+        # if no entry we can proceed as below. if one entry do item.position - entry.position and display the result in a row
+        # display the residual in the next row - user has to select a strategy for that
+        # also calculate avg px etc.
+
         percent_nav = calculate_percent_nav(item, portfolio_data)  # Calculate % of NAV
-        tree.insert("", tk.END, values=(item["symbol"], item["class"], item["position"], f"{percent_nav:.2f}", " "))
+        row_id = tree.insert("", tk.END, values=(item["symbol"], item["class"], item["position"], f"{percent_nav:.2f}", ""))
+        
+    # After adding all items to the treeview
+    window.update_idletasks()  # Update the GUI to ensure treeview is drawn
 
     # Add a strategy dropdown for each row in a separate column
     def on_strategy_cell_click(event):
@@ -51,7 +89,7 @@ def open_portfolio_window(ib):
                 strategy_cb.set(current_strategy)
 
                 # Bind the selection event
-                strategy_cb.bind("<<ComboboxSelected>>", lambda e, i=row: assign_strategy(i, strategy_cb.get()))
+                strategy_cb.bind("<<ComboboxSelected>>", lambda e: on_combobox_select(e, tree, row_id))
 
     tree.bind("<Button-1>", on_strategy_cell_click)
 
