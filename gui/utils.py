@@ -6,18 +6,22 @@ import importlib.util
 from broker import connect_to_IB, disconnect_from_IB
 from strategy_manager import StrategyManager
 from .log import add_log, start_event
+from .portfolio_window import open_portfolio_window
+
 
 # ... other imports ...
 
 # Global variables for strategy threads
 strategy_threads = []
 jupyter_subprocess = None
+strategy_manager = None
 
 def start_trading(stop_button, start_button, window, start_event):
     global strategy_manager
     
     start_event.set()
-    strategy_manager = StrategyManager()
+    if not strategy_manager:
+        strategy_manager = StrategyManager()
     strategy_manager.start_all()
 
     stop_button.place(x=48.0, y=79.0, width=178.0, height=58.0)  # Show 'Stop Trading' button
@@ -33,6 +37,13 @@ def stop_trading(stop_button, start_button, window):
     start_button.place(x=48.0, y=79.0, width=178.0, height=58.0)  # Show 'Start Trading' button
     stop_button.place_forget()  # Hide 'Stop Trading' button
     window.update_idletasks()  # Update the window to reflect changes
+
+def open_portfolio():
+    global strategy_manager
+    if not strategy_manager:
+        strategy_manager = StrategyManager()
+    open_portfolio_window(ib=strategy_manager.ib_client)
+
 
 def exit_application(window):
     print("Terminating Jupyter Process")
