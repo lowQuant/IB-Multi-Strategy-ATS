@@ -8,7 +8,7 @@ ib = None  # Global variable for the IB client
 
 def connect_to_IB(port=7497, clientid=0, symbol=None):
     global ib
-    # util.startLoop()  # Needed in script mode
+    util.startLoop()  # Needed in script mode
     ib = IB()
     try:
         ib.connect('127.0.0.1', port, clientId=clientid)

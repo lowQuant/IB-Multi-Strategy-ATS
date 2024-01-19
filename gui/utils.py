@@ -13,21 +13,6 @@ from .log import add_log, start_event
 strategy_threads = []
 jupyter_subprocess = None
 
-# consider deleting
-def load_strategy(strategy_name):
-    """
-    Dynamically load a strategy module given the strategy file name.
-    """
-    strategy_module = None
-    module_path = f"strategy_manager/strategies/{strategy_name}.py"
-    module_name = strategy_name
-
-    spec = importlib.util.spec_from_file_location(module_name, module_path)
-    if spec and spec.loader:
-        strategy_module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(strategy_module)
-    return strategy_module
-
 def start_trading(stop_button, start_button, window, start_event):
     global strategy_manager
     
@@ -68,12 +53,10 @@ def launch_jupyter(event=None):
     # Launch the browser with the Jupyter URL
     webbrowser.open("http://localhost:8888/tree/data_and_research")
 
-
 def start_jupyter_server():
     global jupyter_subprocess
     jupyter_subprocess = subprocess.Popen(["jupyter", "notebook", "--no-browser"])
     
-
 def is_jupyter_running():
     try:
         response = requests.get("http://localhost:8888")
