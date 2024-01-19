@@ -5,7 +5,7 @@ from pathlib import Path
 from tkinter import Tk, Canvas, Entry, Text, Button, PhotoImage, Label
 
 # My imports
-from .utils import start_trading, stop_trading, exit_application, launch_jupyter
+from .utils import start_trading, stop_trading, exit_application, launch_jupyter, open_portfolio
 from .log import log_buffer, log_lock, start_event
 from .settings_window import open_settings_window
 
@@ -95,7 +95,7 @@ research_btn.place(x=16.0,y=506.0,width=181.0,height=36.0)
 portfolio_btn_img = PhotoImage(file=relative_to_assets("portfolio.png"))
 portfolio_btn = Button(image=portfolio_btn_img,
     borderwidth=0,highlightthickness=0,
-    command=lambda: print("portfolio clicked"),
+    command=lambda: open_portfolio(),
     relief="flat")
 portfolio_btn.place(x=365.0, y=86.0, width=143.0, height=47.0)
 
