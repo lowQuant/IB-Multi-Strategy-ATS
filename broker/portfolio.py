@@ -3,10 +3,63 @@
 import pandas as pd
 from ib_insync import *
 from gui.log import add_log
+import datetime
+from data_and_research import ac
 
 class PortfolioManager:
     def __init__(self, ib_client: IB):
         self.ib = ib_client
+
+    def get_positions_from_ib(self):
+        '''this function gets all portfolio positions in a dataframe format without strategy assignment'''
+        total_equity =  sum(float(entry.value) for entry in self.ib.accountSummary() if entry.tag == "EquityWithLoanValue")
+        portfolio_data = []
+
+        for item in self.ib.portfolio():
+            symbol = item.contract.symbol
+            contractType = item.contract.secType
+
+            if contractType == "OPT":
+                right = "Call" if item.contract.right == "C" else "Put"
+                asset_class = right + " " + str(item.contract.strike) + " " + item.contract.lastTradeDateOrContractMonth
+                if item.position < 0:
+                    pnl = ((item.marketPrice/(item.averageCost/100)) -1) * (-1)
+                else:
+                    pnl = ( (item.marketPrice/ (item.averageCost/100)) -1)
+            elif contractType == "FUT":
+                asset_class = item.contract.localSymbol + " " + item.contract.lastTradeDateOrContractMonth
+                pnl = ((item.marketPrice/(item.averageCost)) -1)
+                pnl = pnl *(-1) if item.position < 0 else pnl
+            elif contractType == "STK":
+                pnl = ((item.marketPrice/(item.averageCost)) -1)
+                pnl = pnl *(-1) if item.position < 0 else pnl
+                asset_class = contractType
+            
+            position_dict = {'timestamp': datetime.datetime.now(),
+                            'symbol': symbol,
+                            'asset class': asset_class,
+                            'position':item.position,
+                            '% of nav':item.marketValue/total_equity,
+                            'averageCost': item.averageCost,
+                            'marketPrice': item.marketPrice,
+                            'pnl %': pnl,
+                            'strategy': '',
+                            'contract': item.contract,
+                            'marketValue': item.marketValue,
+                            'unrealizedPNL': item.unrealizedPNL,
+                            'realizedPNL': item.realizedPNL,
+                            'account': item.account}
+            
+            portfolio_data.append(position_dict)
+                
+        df = pd.DataFrame(portfolio_data)
+
+    def match_ib_positions_with_arcticdb(self):
+        library = ac.get_library('portfolio')
+        df_ac = library.read('positions').data
+        latest_positions = df_ac.sort_values(by='timestamp').groupby(['symbol', 'strategy', 'asset class']).last().reset_index()
+        df_ib = self.get_positions_from_ib()
+        
 
     def fetch_portfolio(self):
         """

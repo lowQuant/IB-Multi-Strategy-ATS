@@ -28,8 +28,7 @@ def initialize_db(db_path):
         df = pd.DataFrame(data, index=index_values)
         library.write(symbol="settings",data=df)
         ac = ac_local
-        return ac
-    
+        
     else: # read local settings if settings table exists
         library = ac_local.get_library('general', create_if_missing=True)
         settings_df = library.read("settings").data
@@ -50,7 +49,14 @@ def initialize_db(db_path):
                 lib.write("settings", settings_df)
         else:
             ac = ac_local
-        return ac
+
+    # Create library portfolio
+    if not "portfolio" in ac.list_libraries():
+        print("Creating library 'portfolio' that will keep track of our strategies' positions")
+        library = ac.get_library('portfolio', create_if_missing=True)
+    
+    # Create other libraries here later (e.g. universe, stocks, futures etc.) 
+    return ac
 
 ac = initialize_db("data_and_research/db")
 

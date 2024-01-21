@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
+import pandas as pd
 from data_and_research import ac, fetch_strategies
 
 def on_combobox_select(event, tree, row_id):
@@ -50,8 +51,8 @@ def open_portfolio_window(ib):
     tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
     # Define the column headings
-    for col in columns:
-        tree.column(col, stretch=tk.YES, minwidth=0, width=100)  # Adjust the width as needed
+    for col,w in zip(columns,[50,120,60,60,100]):
+        tree.column(col, stretch=tk.YES, minwidth=0, width=w)  # Adjust the width as needed
         tree.heading(col, text=col.capitalize())
 
     # Adding data to the treeview
@@ -62,9 +63,10 @@ def open_portfolio_window(ib):
         # display the residual in the next row - user has to select a strategy for that
         # also calculate avg px etc.
 
-        percent_nav = calculate_percent_nav(item, portfolio_data)  # Calculate % of NAV
-        row_id = tree.insert("", tk.END, values=(item["symbol"], item["class"], item["position"], f"{percent_nav:.2f}", ""))
-        
+        # percent_nav = calculate_percent_nav(item, portfolio_data)  # Calculate % of NAV
+        # row_id = tree.insert("", tk.END, values=(item["symbol"], item["class"], item["position"], f"{percent_nav:.2f}", ""))
+        row_id = tree.insert("", tk.END, values=(item["symbol"], item["class"], item["position"], f"{item['% of nav']:.2f}", ""))
+
     # After adding all items to the treeview
     window.update_idletasks()  # Update the GUI to ensure treeview is drawn
 
@@ -97,13 +99,24 @@ def open_portfolio_window(ib):
 
 def get_portfolio_data(ib):
     # This is pseudo data. Replace this function to fetch real data from IB
-    return [
-        {"symbol": "AAPL", "class": "Stock", "position": 100, "marketValue": 15000},
-        {"symbol": "GOOGL", "class": "Stock", "position": 50, "marketValue": 10000},
-        {"symbol": "TSLA", "class": "Stock", "position": 150, "marketValue": 12000},
-        {"symbol": "VXM22", "class": "Future", "position": -2, "marketValue": -5000},
-        {"symbol": "EURUSD", "class": "Forex", "position": 10000, "marketValue": 12000},
-    ]
+    df = pd.DataFrame({
+    'symbol': ['EWT', 'IAU', 'IAU','AAPL'],
+    'class': ['STK', 'STK', 'Call 39.0 20240216','STK'],
+    'position': [200.0, 300.0, -2.0,100],
+    '% of nav': [0.087888, 0.114433, -0.000583,0.1],
+    'strategy': ['', '', '','BH']
+})
+
+    data_list = df.to_dict('records')
+    print(data_list)
+    return data_list
+    # return [
+    #     {"symbol": "AAPL", "class": "Stock", "position": 100, "marketValue": 15000},
+    #     {"symbol": "GOOGL", "class": "Stock", "position": 50, "marketValue": 10000},
+    #     {"symbol": "TSLA", "class": "Stock", "position": 150, "marketValue": 12000},
+    #     {"symbol": "VXM22", "class": "Future", "position": -2, "marketValue": -5000},
+    #     {"symbol": "EURUSD", "class": "Forex", "position": 10000, "marketValue": 12000},
+    # ]
 
 def calculate_percent_nav(item, portfolio_data):
     # Dummy calculation for % of NAV
