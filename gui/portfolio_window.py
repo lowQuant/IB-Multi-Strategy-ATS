@@ -4,35 +4,13 @@ import pandas as pd
 from datetime import datetime
 from data_and_research import ac, fetch_strategies
 
-def on_combobox_select(event, tree, row_id):
-    strategy = event.widget.get()
+def on_combobox_select(tree, strategy, row_id):
+    # Get the symbol from the row
     symbol = tree.set(row_id, 'symbol')
-    row = tree.set(row_id)
-    print(row)
-    print(strategy,symbol)
+    row = tree.item(row_id)
+    print(f"Selected Strategy: {strategy}, Row data: {row}")
 
-def build_strategy_combobox(window, tree, strategies, row_id):
-    # Column index for the strategy column
-    strategy_column_index = "#5"
     
-    # Check if the bounding box can be retrieved, otherwise return
-    bbox = tree.bbox(row_id, strategy_column_index)
-    if not bbox:
-        print(f"Could not get bbox for row: {row_id}")
-        return None
-    
-    x, y, width, height = bbox
-    pady = height // 2
-
-    # Create a Combobox widget with the list of strategies
-    strategy_cb = ttk.Combobox(window, values=strategies)
-    strategy_cb.place(x=x, y=y+pady, anchor="w", width=width)
-    strategy_cb.set("")  # Placeholder text
-
-    # Bind the Combobox to the assign_strategy function when a selection is made
-    strategy_cb.bind("<<ComboboxSelected>>", lambda e: on_combobox_select(e, tree, row_id))
-    return strategy_cb  # Return the combobox to manage it later if needed
-
 def open_portfolio_window(strategy_manager):
     window = tk.Toplevel()
     window.title("Portfolio")
@@ -106,7 +84,7 @@ def open_portfolio_window(strategy_manager):
                 strategy_cb.set(current_strategy)
 
                 # Bind the selection event
-                strategy_cb.bind("<<ComboboxSelected>>", lambda e: on_combobox_select(e, tree, row_id))
+                strategy_cb.bind("<<ComboboxSelected>>", lambda e: on_combobox_select(tree, strategy_cb.get(), row))
 
     tree.bind("<Button-1>", on_strategy_cell_click)
 
@@ -122,6 +100,7 @@ def get_strategies(arctic_lib):
     # Fetch list of strategies from ArcticDB
     pass
 
-def assign_strategy(item_id, strategy, arctic_lib):
+def assign_strategy(item_id, strategy):
+    print(f"from assign_strategy func: {item_id}")
     # Function to assign a strategy to a portfolio item and update in ArcticDB
     pass
