@@ -1,11 +1,11 @@
 import tkinter as tk
 from tkinter import ttk
 import pandas as pd
+from datetime import datetime
 from data_and_research import ac, fetch_strategies
 
 def on_combobox_select(event, tree, row_id):
     strategy = event.widget.get()
-    print("select fct called")
     symbol = tree.set(row_id, 'symbol')
     row = tree.set(row_id)
     print(row)
@@ -38,8 +38,24 @@ def open_portfolio_window(strategy_manager):
     window.title("Portfolio")
     window.geometry("800x400")
 
+    # Fetch the account values
+    cash = sum(float(entry.value) for entry in strategy_manager.ib_client.accountSummary() if entry.tag == "TotalCashValue")
+    total_equity = sum(float(entry.value) for entry in strategy_manager.ib_client.accountSummary() if entry.tag == "EquityWithLoanValue")
+    margin = sum(float(entry.value) for entry in strategy_manager.ib_client.accountSummary() if entry.tag == "InitMarginReq")
+
+    # Create a frame for account information
+    account_info_frame = tk.Frame(window)
+    account_info_frame.pack(side=tk.BOTTOM, fill=tk.X)
+
+    # Labels for account information
+    tk.Label(account_info_frame, text=f"NAV: {total_equity:.2f}").pack(side=tk.LEFT)
+    tk.Label(account_info_frame, text=f"  Cash: {cash:.2f}").pack(side=tk.LEFT)
+    tk.Label(account_info_frame, text=f"  Margin: {margin:.2f}").pack(side=tk.LEFT)
+    tk.Label(account_info_frame, text=f"Date: {datetime.now().strftime('%Y-%m-%d')}").pack(side=tk.RIGHT)
+
     portfolio_data = get_portfolio_data(strategy_manager)  # Fetch the data
-    strategies, strat_df = fetch_strategies()  # Fetch list of strategies
+    strategies,_ = fetch_strategies()  # Fetch list of strategies
+    strategies.append("")
 
     # Add a scrollbar
     scrollbar = tk.Scrollbar(window)
@@ -63,8 +79,6 @@ def open_portfolio_window(strategy_manager):
         # display the residual in the next row - user has to select a strategy for that
         # also calculate avg px etc.
 
-        # percent_nav = calculate_percent_nav(item, portfolio_data)  # Calculate % of NAV
-        # row_id = tree.insert("", tk.END, values=(item["symbol"], item["class"], item["position"], f"{percent_nav:.2f}", ""))
         row_id = tree.insert("", tk.END, values=(item["symbol"], item["asset class"], item["position"], f"{item['% of nav']:.2f}",
                             f"{item['averageCost']:.2f}", f"{item['marketPrice']:.2f}", f"{item['pnl %']:.2f}",""))
 
@@ -99,31 +113,10 @@ def open_portfolio_window(strategy_manager):
     scrollbar.config(command=tree.yview)
 
 def get_portfolio_data(strategy_manager):
-    # This is pseudo data. Replace this function to fetch real data from IB
-#     df = pd.DataFrame({
-#     'symbol': ['EWT', 'IAU', 'IAU','AAPL'],
-#     'class': ['STK', 'STK', 'Call 39.0 20240216','STK'],
-#     'position': [200.0, 300.0, -2.0,100],
-#     '% of nav': [0.087888, 0.114433, -0.000583,0.1],
-#     'strategy': ['', '', '','BH']
-# })
     df = strategy_manager.portfolio_manager.get_ib_positions_for_gui()
     data_list = df.to_dict('records')
     print(data_list)
     return data_list
-    # return [
-    #     {"symbol": "AAPL", "class": "Stock", "position": 100, "marketValue": 15000},
-    #     {"symbol": "GOOGL", "class": "Stock", "position": 50, "marketValue": 10000},
-    #     {"symbol": "TSLA", "class": "Stock", "position": 150, "marketValue": 12000},
-    #     {"symbol": "VXM22", "class": "Future", "position": -2, "marketValue": -5000},
-    #     {"symbol": "EURUSD", "class": "Forex", "position": 10000, "marketValue": 12000},
-    # ]
-
-def calculate_percent_nav(item, portfolio_data):
-    # Dummy calculation for % of NAV
-    total_nav = sum(d['marketValue'] for d in portfolio_data)
-    percent_nav = (item['marketValue'] / total_nav) * 100
-    return percent_nav
 
 def get_strategies(arctic_lib):
     # Fetch list of strategies from ArcticDB
