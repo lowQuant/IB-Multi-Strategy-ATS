@@ -53,7 +53,13 @@ class PortfolioManager:
             portfolio_data.append(position_dict)
                 
         df = pd.DataFrame(portfolio_data)
-
+        return df
+    
+    def get_ib_positions_for_gui(self):
+        df = self.get_positions_from_ib()
+        df = df[['symbol','asset class','position','% of nav','averageCost','marketPrice','pnl %','strategy']]
+        return df
+        
     def match_ib_positions_with_arcticdb(self):
         library = ac.get_library('portfolio')
         df_ac = library.read('positions').data

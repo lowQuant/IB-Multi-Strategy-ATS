@@ -42,7 +42,7 @@ def open_portfolio():
     global strategy_manager
     if not strategy_manager:
         strategy_manager = StrategyManager()
-    open_portfolio_window(ib=strategy_manager.ib_client)
+    open_portfolio_window(strategy_manager)
 
 
 def exit_application(window):

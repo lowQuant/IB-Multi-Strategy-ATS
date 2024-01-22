@@ -7,6 +7,7 @@ from data_and_research.utils import fetch_strategies
 from gui.log import add_log
 from broker import connect_to_IB,disconnect_from_IB
 from broker.trademanager import TradeManager
+from broker.portfolio import PortfolioManager
 
 class StrategyManager:
     def __init__(self):
@@ -15,7 +16,8 @@ class StrategyManager:
         self.strategy_threads = []
         self.strategies = []
         self.trade_manager = TradeManager(ib_client=self.ib_client)
-
+        self.portfolio_manager = PortfolioManager(ib_client=self.ib_client)
+        
         # Create a queue for thread safe editing of shared resources (e.g. updating available cash etc.)
         self.message_queue = queue.Queue()
         self.message_processor_thread = threading.Thread(target=self.process_messages)

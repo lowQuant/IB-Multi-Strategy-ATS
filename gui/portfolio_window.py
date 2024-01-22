@@ -33,12 +33,12 @@ def build_strategy_combobox(window, tree, strategies, row_id):
     strategy_cb.bind("<<ComboboxSelected>>", lambda e: on_combobox_select(e, tree, row_id))
     return strategy_cb  # Return the combobox to manage it later if needed
 
-def open_portfolio_window(ib):
+def open_portfolio_window(strategy_manager):
     window = tk.Toplevel()
     window.title("Portfolio")
-    window.geometry("600x400")
+    window.geometry("800x400")
 
-    portfolio_data = get_portfolio_data(ib)  # Fetch the data
+    portfolio_data = get_portfolio_data(strategy_manager)  # Fetch the data
     strategies, strat_df = fetch_strategies()  # Fetch list of strategies
 
     # Add a scrollbar
@@ -46,12 +46,12 @@ def open_portfolio_window(ib):
     scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
     # Create the treeview
-    columns = ("symbol", "class", "position", "% of NAV", "strategy")
+    columns = ("symbol", "Asset Class", "position", "NAV share",'Average Cost','market Price','pnl %',"strategy")
     tree = ttk.Treeview(window, columns=columns, show='headings', yscrollcommand=scrollbar.set)
     tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
     # Define the column headings
-    for col,w in zip(columns,[50,120,60,60,100]):
+    for col,w in zip(columns,[50,120,60,60,60,60,60,100]):
         tree.column(col, stretch=tk.YES, minwidth=0, width=w)  # Adjust the width as needed
         tree.heading(col, text=col.capitalize())
 
@@ -65,7 +65,8 @@ def open_portfolio_window(ib):
 
         # percent_nav = calculate_percent_nav(item, portfolio_data)  # Calculate % of NAV
         # row_id = tree.insert("", tk.END, values=(item["symbol"], item["class"], item["position"], f"{percent_nav:.2f}", ""))
-        row_id = tree.insert("", tk.END, values=(item["symbol"], item["class"], item["position"], f"{item['% of nav']:.2f}", ""))
+        row_id = tree.insert("", tk.END, values=(item["symbol"], item["asset class"], item["position"], f"{item['% of nav']:.2f}",
+                            f"{item['averageCost']:.2f}", f"{item['marketPrice']:.2f}", f"{item['pnl %']:.2f}",""))
 
     # After adding all items to the treeview
     window.update_idletasks()  # Update the GUI to ensure treeview is drawn
@@ -97,16 +98,16 @@ def open_portfolio_window(ib):
 
     scrollbar.config(command=tree.yview)
 
-def get_portfolio_data(ib):
+def get_portfolio_data(strategy_manager):
     # This is pseudo data. Replace this function to fetch real data from IB
-    df = pd.DataFrame({
-    'symbol': ['EWT', 'IAU', 'IAU','AAPL'],
-    'class': ['STK', 'STK', 'Call 39.0 20240216','STK'],
-    'position': [200.0, 300.0, -2.0,100],
-    '% of nav': [0.087888, 0.114433, -0.000583,0.1],
-    'strategy': ['', '', '','BH']
-})
-
+#     df = pd.DataFrame({
+#     'symbol': ['EWT', 'IAU', 'IAU','AAPL'],
+#     'class': ['STK', 'STK', 'Call 39.0 20240216','STK'],
+#     'position': [200.0, 300.0, -2.0,100],
+#     '% of nav': [0.087888, 0.114433, -0.000583,0.1],
+#     'strategy': ['', '', '','BH']
+# })
+    df = strategy_manager.portfolio_manager.get_ib_positions_for_gui()
     data_list = df.to_dict('records')
     print(data_list)
     return data_list
