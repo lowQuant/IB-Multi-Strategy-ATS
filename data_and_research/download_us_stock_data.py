@@ -9,7 +9,7 @@ import talib
 from utils import ac
 
 lib = ac.get_library('stocks', create_if_missing=True)
-
+print(ac.list_libraries())
 symbol_df = pd.read_csv("data_and_research/us_stocks/symbols.csv",delimiter=',',index_col='Symbol').drop('Unnamed: 0',axis=1)
 symbols = symbol_df.index.unique().to_list()
 # names = symbol_df.Name.to_list()
@@ -26,19 +26,20 @@ print(f"Splitting symbols into {len(chunked_symbols)} chunks.")
 
 # Function to download and store data
 def download_and_store(chunk):
-    data = yf.download(symbols, group_by="Ticker", period="3y", auto_adjust=True)
-
+    data = yf.download(chunk, group_by="Ticker", period="3y", auto_adjust=True)
+    print(data.head())
     df = data.stack(level=0).rename_axis(['Date', 'Symbol']).reset_index(level=1)
-    df = df.sort_values(by='Symbol',axis='index',kind='stable').drop(axis=1,columns="Adj Close")
-
+    df = df.sort_values(by='Symbol',axis='index',kind='stable')
+    print(df.columns)
     # Add additional information
-    df["Name"] = df["Symbol"].map(symbol_df["Name"])
-    df['Sector'] = df['Symbol'].map(symbol_df['Sector'])
+    # df["Name"] = df["Symbol"].map(symbol_df["Name"])
+    # df['Sector'] = df['Symbol'].map(symbol_df['Sector'])
 
-    df["20D_SMA"] = df.groupby("Symbol")["Close"].rolling(window=20).mean().reset_index(level=0, drop=True)
+    #df["20D_SMA"] = df.groupby("Symbol")["Close"].rolling(window=20).mean().reset_index(level=0, drop=True)
     df["50D_SMA"] = df.groupby("Symbol")["Close"].rolling(window=50).mean().reset_index(level=0, drop=True)
     df["200D_SMA"] = df.groupby("Symbol")["Close"].rolling(window=200).mean().reset_index(level=0, drop=True)
-    df['ATR'] = df.groupby('Symbol').apply(lambda group: talib.ATR(group['High'], group['Low'], group['Close'], timeperiod=14)).reset_index(level=0, drop=True)
+    #df['ATR'] = df.groupby('Symbol').apply(lambda group: talib.ATR(group['High'], group['Low'], group['Close'], timeperiod=14)).reset_index(level=0, drop=True)
+    print(df)
     df['1M'] = df.groupby('Symbol')['Close'].pct_change(21)
     df['3M'] = df.groupby('Symbol')['Close'].pct_change(63)
     df['6M'] = df.groupby('Symbol')['Close'].pct_change(126)
@@ -47,7 +48,7 @@ def download_and_store(chunk):
     df['RS Rank'] = df.groupby(df.index)['RS IBD'].rank(pct=True)
     df["RS Rank 20D MA"] = df.groupby("Symbol")["RS Rank"].rolling(window=20).mean().reset_index(level=0, drop=True)
 
-    for symbol in df.Symbol.unique().to_list():
+    for symbol in df.Symbol.unique().tolist():
         stock_data = df[df['Symbol']==symbol]
         # Store in Arctic
         print(f"saving {symbol} to arcticdb")

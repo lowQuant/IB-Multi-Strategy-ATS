@@ -1,4 +1,4 @@
-# ATS/broker/trade.py
+# ATS/broker/trademanager.py
 from ib_insync import *
 from gui.log import add_log
 
@@ -9,7 +9,6 @@ class TradeManager:
     def trade(self, contract, quantity, order_type='MKT', urgency='Patient', orderRef="", limit=None):
         """
         Place an Order on the exchange via ib_insync.
-
         :param contract: ib.Contract
         :param quantity: order size as a signed integer (quantity > 0 means 'BUY' and quantity < 0 means 'SELL')
         :param order_type: order type such as 'LMT', 'MKT' etc.
@@ -17,7 +16,7 @@ class TradeManager:
         :param limit: if order_type 'LMT' state limit as float
         """
         self.ib.qualifyContracts(contract)
-
+        
         # Create order object
         action = 'BUY' if quantity > 0 else 'SELL'
         totalQuantity = int(abs(quantity))
@@ -47,7 +46,6 @@ class TradeManager:
     def roll_future(self, current_contract, new_contract, orderRef=""):
         """
             Roll a futures contract by closing the current contract and opening a new one.
-
             :param current_contract: The current ib_insync.Contract to be closed.
             :param new_contract: The new ib_insync.Contract to be opened.
             :param orderRef: Reference identifier for the order.
@@ -70,5 +68,5 @@ class TradeManager:
         order.orderRef = orderRef
 
         # Place the order
-        # trade = self.ib.placeOrder(bag, order)
+        trade = self.ib.placeOrder(bag, order)
         return bag, order

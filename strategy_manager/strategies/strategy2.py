@@ -4,7 +4,7 @@ from gui.log import add_log, start_event
 import time
 
 class Strategy:
-    def __init__(self,ib_client,strategy_manager,trade_manager):
+    def __init__(self,ib_client,strategy_manager):
         self.ib = ib_client
 
     def run(self):
