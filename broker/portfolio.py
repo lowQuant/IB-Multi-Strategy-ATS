@@ -10,6 +10,22 @@ class PortfolioManager:
     def __init__(self, ib_client: IB):
         self.ib = ib_client
 
+    def convert_to_base_currency(self,value: float, currency: str):
+        currency = currency.upper()
+        base =  [entry.currency for entry in self.ib.accountSummary() if entry.tag == "EquityWithLoanValue"][0]
+        fx_pair = Forex(base+currency)
+
+        market_data = self.ib.reqMktData(fx_pair, '', False, False)
+        self.ib.sleep(1)
+
+        if market_data.bid > 0:
+            fx_spot = market_data.bid
+        else:
+            fx_spot = market_data.close
+        
+        base_value = value / fx_spot
+        return base_value
+
     def get_positions_from_ib(self):
         '''this function gets all portfolio positions in a dataframe format without strategy assignment'''
         total_equity =  sum(float(entry.value) for entry in self.ib.accountSummary() if entry.tag == "EquityWithLoanValue")
@@ -35,7 +51,7 @@ class PortfolioManager:
                 pnl = pnl *(-1) if item.position < 0 else pnl
                 asset_class = contractType
             
-            position_dict = {'timestamp': datetime.datetime.now(),
+            position_dict = {'timestamp': datetime.datetime.now().strftime('%Y-%m-%d %H:%M'),
                             'symbol': symbol,
                             'asset class': asset_class,
                             'position':item.position,
@@ -45,8 +61,11 @@ class PortfolioManager:
                             'pnl %': pnl,
                             'strategy': '',
                             'contract': item.contract,
+                            'trade': None,
+                            'open_dt':datetime.date.today().isoformat(),
                             'marketValue': item.marketValue,
                             'unrealizedPNL': item.unrealizedPNL,
+                            'currency':item.contract.currency,
                             'realizedPNL': item.realizedPNL,
                             'account': item.account}
             
