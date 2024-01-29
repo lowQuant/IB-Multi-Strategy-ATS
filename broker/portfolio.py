@@ -25,6 +25,18 @@ class PortfolioManager:
         
         base_value = value / fx_spot
         return base_value
+    
+    def calculate_pnl(self,row):
+        asset_class = row['asset_class']
+        if asset_class == 'STK' or asset_class == 'FUT':
+            pnl = ((row.marketPrice/(row.averageCost)) -1)
+            pnl = pnl *(-1) if row.position < 0 else pnl
+        else: # case for options only (be more specific)
+            if row.position < 0:
+                pnl = ((row.marketPrice/(row.averageCost/100)) -1) * (-1)
+            else:
+                pnl = ( (row.marketPrice/ (row.averageCost/100)) -1)
+        return pnl
 
     def get_positions_from_ib(self):
         '''this function gets all portfolio positions in a dataframe format without strategy assignment'''
