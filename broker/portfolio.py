@@ -9,22 +9,63 @@ from data_and_research import ac
 class PortfolioManager:
     def __init__(self, ib_client: IB):
         self.ib = ib_client
+        self.fx_cache = {}
+        self.base = [entry.currency for entry in self.ib.accountSummary() if entry.tag == "EquityWithLoanValue"][0]
+
+    def convert_marketValue_to_base(self,df):
+        """returns a DataFrame with 'marketValue_base' column
+        
+        Args:
+            df (pd.DataFrame): DataFrame containing the 'marketValue' column."""
+        fx_rates = df['currency'].map(lambda c: self.get_fx_rate(c, self.base))
+
+        if fx_rates.unique().size > 1:
+            df['marketValue_base'] = df['marketValue'] / fx_rates
+        else:
+            df['marketValue_base'] = df['marketValue']
+
+        return df
+
+    def get_fx_rate(self,currency, base_currency):
+        """Retrieves the FX rate from a cached dictionary or live IB request.
+
+        Args:
+            currency (str): The currency to convert from.
+            base_currency (str): The base currency to convert to."""
+
+        global fx_cache  # Use a global variable for caching
+
+        if (currency, base_currency) not in fx_cache:
+            if currency == base_currency:
+                fx_cache[(currency, base_currency)] = 1.0
+            else:
+                fx_pair = Forex(base_currency+currency)
+                self.ib.reqMarketDataType(4)  # Ensure market data type is set
+                self.ib.qualifyContracts(fx_pair)
+                price = self.ib.reqMktData(fx_pair, '', False, False)
+                self.ib.sleep(0.2)  # Wait for data
+                self.fx_cache[(currency, base_currency)] = price.marketPrice()
+
+        return fx_cache[(currency, base_currency)]
 
     def convert_to_base_currency(self,value: float, currency: str):
         currency = currency.upper()
         base =  [entry.currency for entry in self.ib.accountSummary() if entry.tag == "EquityWithLoanValue"][0]
-        fx_pair = Forex(base+currency)
-
-        market_data = self.ib.reqMktData(fx_pair, '', False, False)
-        self.ib.sleep(1)
-
-        if market_data.bid > 0:
-            fx_spot = market_data.bid
+        if base == currency:
+            return value
         else:
-            fx_spot = market_data.close
-        
-        base_value = value / fx_spot
-        return base_value
+            fx_pair = Forex(base+currency)
+
+            market_data = self.ib.reqMktData(fx_pair, '', False, False)
+            self.ib.sleep(1)
+
+            if market_data.bid > 0:
+                fx_spot = market_data.bid
+            else:
+                fx_spot = market_data.close
+            
+            base_value = value / fx_spot
+            return base_value
     
     def calculate_pnl(self,row):
         asset_class = row['asset_class']
@@ -36,7 +77,7 @@ class PortfolioManager:
                 pnl = ((row.marketPrice/(row.averageCost/100)) -1) * (-1)
             else:
                 pnl = ( (row.marketPrice/ (row.averageCost/100)) -1)
-        return pnl
+        return pnl * 100
 
     def get_positions_from_ib(self):
         '''this function gets all portfolio positions in a dataframe format without strategy assignment'''
@@ -97,51 +138,3 @@ class PortfolioManager:
         latest_positions = df_ac.sort_values(by='timestamp').groupby(['symbol', 'strategy', 'asset class']).last().reset_index()
         df_ib = self.get_positions_from_ib()
         
-
-    def fetch_portfolio(self):
-        """
-        Fetch the current portfolio and cash positions and combine them into a DataFrame.
-        """
-        # Fetch portfolio data
-        portfolio_items = self.ib.portfolio()
-        portfolio_data = [
-            {
-                "symbol": item.contract.symbol,
-                "contractType": item.contract.secType,
-                "position": item.position,
-                "marketPrice": item.marketPrice,
-                "marketValue": item.marketValue,
-                "averageCost": item.averageCost,
-                "unrealizedPNL": item.unrealizedPNL,
-                "realizedPNL": item.realizedPNL,
-                "conId": item.contract.conId,
-                "lastTradeDate": item.contract.lastTradeDateOrContractMonth,
-                "account": item.account
-            }
-            for item in portfolio_items
-        ]
-        portfolio_df = pd.DataFrame(portfolio_data)
-
-        # Fetch cash positions
-        cash_positions = [item for item in self.ib.accountSummary() if item.tag == 'CashBalance']
-        cash_data = [
-            {
-                "symbol": item.currency,
-                "contractType": "CASH",
-                "position": float(item.value),
-                "marketPrice": None,
-                "marketValue": float(item.value),
-                "averageCost": None,
-                "unrealizedPNL": None,
-                "realizedPNL": None,
-                "conId": None,
-                "lastTradeDate": None,
-                "account": item.account
-            }
-            for item in cash_positions
-        ]
-        cash_df = pd.DataFrame(cash_data)
-
-        # Combine portfolio and cash DataFrames
-        combined_df = pd.concat([portfolio_df, cash_df], ignore_index=True)
-        return combined_df
