@@ -23,10 +23,11 @@ def manage_strategy(client_id, strategy_manager):
         # Create a new event loop for this thread
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-
+        add_log("started a loop")
         # Instantiate the Strategy class
         global strategy
         strategy = Strategy(client_id, strategy_manager)
+        add_log("instantiated Strategy")
         strategy.run()
     except Exception as e:
         # Handle exceptions
@@ -63,7 +64,7 @@ class Strategy:
         self.update_invested_contract()
         #self.min_weight, self.target_weight, self.max_weight = 0.04, 0.07, 0.1
         self.target_weight, self.min_weight, self.max_weight = get_strategy_allocation_bounds(self.strategy_symbol)
-       
+        
     @staticmethod
     def check_investment_weight(self, symbol):
         """ Returns the investment weight for the given symbol. """
