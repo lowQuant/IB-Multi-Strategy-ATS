@@ -40,12 +40,12 @@ def open_portfolio_window(strategy_manager):
     scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
     # Create the treeview
-    columns = ("symbol", "Asset Class", "position", "NAV share",'Average Cost','market Price','pnl %',"strategy")
+    columns = ("symbol", "Asset Class", "position", "FX" ,"Weight (%)",'Price','Cost','pnl %',"strategy")
     tree = ttk.Treeview(window, columns=columns, show='headings', yscrollcommand=scrollbar.set)
     tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
     # Define the column headings
-    for col,w in zip(columns,[50,120,60,60,60,60,60,100]):
+    for col,w in zip(columns,[50,120,60,50,60,60,60,60,100]):
         tree.column(col, stretch=tk.YES, minwidth=0, width=w)  # Adjust the width as needed
         tree.heading(col, text=col.capitalize())
 
@@ -57,8 +57,8 @@ def open_portfolio_window(strategy_manager):
         # display the residual in the next row - user has to select a strategy for that
         # also calculate avg px etc.
 
-        row_id = tree.insert("", tk.END, values=(item["symbol"], item["asset class"], item["position"], f"{item['% of nav']:.2f}",
-                            f"{item['averageCost']:.2f}", f"{item['marketPrice']:.2f}", f"{item['pnl %']:.2f}",""))
+        row_id = tree.insert("", tk.END, values=(item["symbol"], item["asset class"], item["position"], item['currency'],f"{item['% of nav']:.2f}",
+                            f"{item['marketPrice']:.2f}", f"{item['averageCost']:.2f}", f"{item['pnl %']:.2f}",""))
 
     # After adding all items to the treeview
     window.update_idletasks()  # Update the GUI to ensure treeview is drawn

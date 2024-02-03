@@ -21,6 +21,7 @@ class PortfolioManager:
 
         if fx_rates.unique().size > 1:
             df['marketValue_base'] = df['marketValue'] / fx_rates
+            df['fx_rate'] = fx_rates
         else:
             df['marketValue_base'] = df['marketValue']
 
@@ -33,20 +34,21 @@ class PortfolioManager:
             currency (str): The currency to convert from.
             base_currency (str): The base currency to convert to."""
 
-        global fx_cache  # Use a global variable for caching
-
-        if (currency, base_currency) not in fx_cache:
+        if (currency, base_currency) not in self.fx_cache:
             if currency == base_currency:
-                fx_cache[(currency, base_currency)] = 1.0
+                self.fx_cache[(currency, base_currency)] = 1.0
             else:
                 fx_pair = Forex(base_currency+currency)
                 self.ib.reqMarketDataType(4)  # Ensure market data type is set
                 self.ib.qualifyContracts(fx_pair)
                 price = self.ib.reqMktData(fx_pair, '', False, False)
                 self.ib.sleep(0.2)  # Wait for data
-                self.fx_cache[(currency, base_currency)] = price.marketPrice()
+                if type(price.marketPrice()) == int:
+                    self.fx_cache[(currency, base_currency)] = price.marketPrice()
+                else:
+                    self.fx_cache[(currency, base_currency)] = price.close
 
-        return fx_cache[(currency, base_currency)]
+        return self.fx_cache[(currency, base_currency)]
 
     def convert_to_base_currency(self,value: float, currency: str):
         currency = currency.upper()
@@ -97,7 +99,7 @@ class PortfolioManager:
                     pnl = ( (item.marketPrice/ (item.averageCost/100)) -1)
             elif contractType == "FUT":
                 asset_class = item.contract.localSymbol + " " + item.contract.lastTradeDateOrContractMonth
-                pnl = ((item.marketPrice/(item.averageCost)) -1)
+                pnl = ((item.marketPrice/(item.averageCost/int(item.contract.multiplier))) -1)
                 pnl = pnl *(-1) if item.position < 0 else pnl
             elif contractType == "STK":
                 pnl = ((item.marketPrice/(item.averageCost)) -1)
@@ -108,10 +110,10 @@ class PortfolioManager:
                             'symbol': symbol,
                             'asset class': asset_class,
                             'position':item.position,
-                            '% of nav':item.marketValue/total_equity,
+                            '% of nav':(item.marketValue/total_equity) * 100,
                             'averageCost': item.averageCost,
                             'marketPrice': item.marketPrice,
-                            'pnl %': pnl,
+                            'pnl %': pnl * 100,
                             'strategy': '',
                             'contract': item.contract,
                             'trade': None,
@@ -125,11 +127,13 @@ class PortfolioManager:
             portfolio_data.append(position_dict)
                 
         df = pd.DataFrame(portfolio_data)
+        df = self.convert_marketValue_to_base(df)
+        df['% of nav'] = df['% of nav'] / df.fx_rate
         return df
     
     def get_ib_positions_for_gui(self):
         df = self.get_positions_from_ib()
-        df = df[['symbol','asset class','position','% of nav','averageCost','marketPrice','pnl %','strategy']]
+        df = df[['symbol','asset class','position','% of nav','currency','marketPrice','averageCost','pnl %','strategy']]
         return df
         
     def match_ib_positions_with_arcticdb(self):
