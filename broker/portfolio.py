@@ -72,6 +72,8 @@ class PortfolioManager:
     
     def update_data(self,output_df,row):
         total_equity =  sum(float(entry.value) for entry in self.ib.accountSummary() if entry.tag == "EquityWithLoanValue")
+        output_df = output_df.copy()
+        output_df['timestamp'] = row['timestamp']
         output_df['marketPrice'] = row['marketPrice']
         output_df['marketValue_base'] = output_df['marketValue'] / row['fx_rate']
         output_df['pnl %'] = self.calculate_pnl(row.marketPrice,output_df.averageCost.item(),output_df.position.item(),row.contract)
@@ -147,6 +149,8 @@ class PortfolioManager:
             'contract': row['contract'],
             'trade': None,
             'open_dt': datetime.date.today().isoformat(),
+            'close_dt':None,
+            'deleted': False,
             'marketValue': residual_market_value,
             'unrealizedPNL': (market_price - residual_avg_cost) * residual_position,
             'currency': row.currency,
@@ -195,6 +199,8 @@ class PortfolioManager:
                             'contract': item.contract,
                             'trade': None,
                             'open_dt':datetime.date.today().isoformat(),
+                            'close_dt': None,
+                            'deleted': False,
                             'marketValue': item.marketValue,
                             'unrealizedPNL': item.unrealizedPNL,
                             'currency':item.contract.currency,
@@ -228,9 +234,19 @@ class PortfolioManager:
         df_final_sorted = df_final_sorted.drop('max_nav_per_symbol', axis=1)
 
         return df_final_sorted
-        
+
+    def create_positions_table(self):
+        df_ib = self.get_positions_from_ib()
+        self.save_positions(df_ib)
+        return df_ib
+
     def match_ib_positions_with_arcticdb(self):
-        df_ac = self.library.read('positions').data
+        if 'positions' in self.library.list_symbols():
+            df_ac = self.library.read('positions').data
+        else:
+            df = self.create_positions_table()
+            return df
+        
         latest_positions_in_ac = df_ac.sort_values(by='timestamp').groupby(['symbol', 'strategy', 'asset class']).last().reset_index()
         df_ib = self.get_positions_from_ib()
 
@@ -276,5 +292,27 @@ class PortfolioManager:
                     residual = self.handle_residual(strategy_entries_in_ac,row)
                     df_merged = pd.concat([df_merged, residual], ignore_index=True)
 
+        # save merged_df in arctic db
+        self.save_positions(df_merged)
         return df_merged         
                 
+    def save_positions(self, df):
+        print(df)
+        # Convert 'contract' column to string as ArcticDB may not handle custom objects well
+        df['contract'] = df['contract'].astype(str)
+        df['trade'] = df['trade'].astype(str)
+        # df['symbol'] = df['symbol'].astype(str)
+        # df['asset class'] = df['asset class'].astype(str)
+        # df['strategy'] = df['strategy'].astype(str)
+        # Ensure that all other columns are of a consistent and compatible data type
+
+        numeric_columns = ['position', '% of nav', 'averageCost', 'marketPrice', 'pnl %', 'marketValue', 'unrealizedPNL', 'realizedPNL','marketValue_base','fx_rate']
+        for col in numeric_columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+
+        # Append the new records with updated positions to ArcticDB
+        if 'positions' in self.library.list_symbols():
+            self.library.append('positions', df)
+        else:
+            print(f"Created symbol 'positions' in arcticdb library: {self.library}")
+            self.library.write('positions',df)
