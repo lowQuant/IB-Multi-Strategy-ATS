@@ -4,7 +4,10 @@ import pandas as pd
 from datetime import datetime
 import importlib.util
 from pathlib import Path
-from arcticdb import Arctic, QueryBuilder
+from arcticdb import Arctic, QueryBuilder, LibraryOptions
+
+# Create LibraryOptions with dynamic_schema enabled
+LIBRARY_OPTIONS = LibraryOptions(dynamic_schema=True)
 
 def initialize_db(db_path):
     global ac
@@ -53,7 +56,7 @@ def initialize_db(db_path):
     # Create library portfolio
     if not "portfolio" in ac.list_libraries():
         print("Creating library 'portfolio' that will keep track of our strategies' positions")
-        library = ac.get_library('portfolio', create_if_missing=True)
+        library = ac.get_library('portfolio', create_if_missing=True, library_options=LIBRARY_OPTIONS)
     
     # Create other libraries here later (e.g. universe, stocks, futures etc.) 
     return ac

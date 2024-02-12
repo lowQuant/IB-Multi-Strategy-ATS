@@ -132,9 +132,6 @@ class PortfolioManager:
         residual_percent_nav = ((residual_market_value / row.fx_rate) / total_equity) * 100
         pnl_percent = self.calculate_pnl(market_price,residual_avg_cost,residual_position,row.contract)
 
-        # timestamp	symbol	asset class	position	% of nav	averageCost	marketPrice	pnl %	strategy	contract	trade	open_dt	marketValue	unrealizedPNL	currency	realizedPNL	account	marketValue_base	fx_rate
-    #  0	2024-02-03 02:16	EWT	STK	200.0	8.025971	44.256828	44.758621	1.133820		Stock(conId=253190576, symbol='EWT', right='0'...	None	2024-02-03	8951.72	100.36	USD	0.0	U7706434	8233.738043	1.0872
-            
         # Prepare the residual row data
         residual_row = {
             'timestamp': datetime.datetime.now().strftime('%Y-%m-%d %H:%M'),
@@ -149,7 +146,7 @@ class PortfolioManager:
             'contract': row['contract'],
             'trade': None,
             'open_dt': datetime.date.today().isoformat(),
-            'close_dt':None,
+            'close_dt': None,
             'deleted': False,
             'marketValue': residual_market_value,
             'unrealizedPNL': (market_price - residual_avg_cost) * residual_position,
@@ -186,7 +183,7 @@ class PortfolioManager:
                 pnl = ((item.marketPrice/(item.averageCost)) -1)
                 pnl = pnl *(-1) if item.position < 0 else pnl
                 asset_class = contractType
-            
+                    
             position_dict = {'timestamp': datetime.datetime.now().strftime('%Y-%m-%d %H:%M'),
                             'symbol': symbol,
                             'asset class': asset_class,
@@ -205,11 +202,15 @@ class PortfolioManager:
                             'unrealizedPNL': item.unrealizedPNL,
                             'currency':item.contract.currency,
                             'realizedPNL': item.realizedPNL,
-                            'account': item.account}
+                            'account': item.account,
+                            'marketValue_base': None,
+                            'fx_rate': None}
             
             portfolio_data.append(position_dict)
                 
         df = pd.DataFrame(portfolio_data)
+
+        # populates columns 'marketValue_base' and 'fx_rate'
         df = self.convert_marketValue_to_base(df)
         df['% of nav'] = df['% of nav'] / df.fx_rate
         return df
@@ -244,9 +245,11 @@ class PortfolioManager:
         if 'positions' in self.library.list_symbols():
             df_ac = self.library.read('positions').data
         else:
-            df = self.create_positions_table()
-            return df
-        
+            print("Msg from function 'match_ib_positions_with_arcticdb': No Symbol 'positions' in library 'portfolio'")
+            df_ib = self.get_positions_from_ib()
+            self.save_positions(df_ib)
+            return df_ib
+
         latest_positions_in_ac = df_ac.sort_values(by='timestamp').groupby(['symbol', 'strategy', 'asset class']).last().reset_index()
         df_ib = self.get_positions_from_ib()
 
@@ -292,27 +295,18 @@ class PortfolioManager:
                     residual = self.handle_residual(strategy_entries_in_ac,row)
                     df_merged = pd.concat([df_merged, residual], ignore_index=True)
 
-        # save merged_df in arctic db
         self.save_positions(df_merged)
-        return df_merged         
+        return df_merged
+    
+    def save_positions(self, df_merged):
+        df_merged = self.normalize_columns(df_merged)
+        if 'positions' in self.library.list_symbols():
+            self.library.append('positions', df_merged,prune_previous_versions=True,validate_index=False)
+        else:
+            print("Creating an arcticdb entry 'positions' in library 'portfolio'")
+            self.library.write('positions',df_merged,prune_previous_versions = True,  validate_index=False)
                 
-    def save_positions(self, df):
-        print(df)
-        # Convert 'contract' column to string as ArcticDB may not handle custom objects well
+    def normalize_columns(self, df):
         df['contract'] = df['contract'].astype(str)
         df['trade'] = df['trade'].astype(str)
-        # df['symbol'] = df['symbol'].astype(str)
-        # df['asset class'] = df['asset class'].astype(str)
-        # df['strategy'] = df['strategy'].astype(str)
-        # Ensure that all other columns are of a consistent and compatible data type
-
-        numeric_columns = ['position', '% of nav', 'averageCost', 'marketPrice', 'pnl %', 'marketValue', 'unrealizedPNL', 'realizedPNL','marketValue_base','fx_rate']
-        for col in numeric_columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-
-        # Append the new records with updated positions to ArcticDB
-        if 'positions' in self.library.list_symbols():
-            self.library.append('positions', df)
-        else:
-            print(f"Created symbol 'positions' in arcticdb library: {self.library}")
-            self.library.write('positions',df)
+        return df
