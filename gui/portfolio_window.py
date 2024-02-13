@@ -7,9 +7,25 @@ from data_and_research import ac, fetch_strategies
 def on_combobox_select(tree, strategy, row_id):
     # Get the symbol from the row
     symbol = tree.set(row_id, 'symbol')
-    row = tree.item(row_id)
+    asset_class = tree.set(row_id, 'Asset Class')
+    position = float(tree.set(row_id, 'position'))
+    positions_df = ac.get_library('portfolio').read('positions').data
+
+   # Filter the DataFrame for the row that matches our criteria
+    filter_cond = (positions_df['symbol'] == symbol) & \
+                  (positions_df['asset class'] == asset_class) & \
+                  (positions_df['position'] == position)
+    filtered_df = positions_df.loc[filter_cond]
+
+    # Check if there are any rows to update
+    if not filtered_df.empty:
+        # Update the strategy for the filtered rows
+        positions_df.loc[filter_cond, 'strategy'] = strategy
     
-    print(f"Selected Strategy: {strategy}, Row data: {row}")
+    ac.get_library('portfolio').write('positions', positions_df, metadata={'updated': 'strategy assignment from gui'})
+
+    print(f"Strategy '{strategy}' assigned to position with symbol '{symbol}', asset class '{asset_class}', position {position}")
+    
 
 def open_portfolio_window(strategy_manager):
     window = tk.Toplevel()
