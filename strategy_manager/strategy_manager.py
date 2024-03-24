@@ -107,9 +107,11 @@ class StrategyManager:
         # Implement status change handling logic
         if "Pending" not in status: # not interested in pending order actions
             add_log(f"{status}: {trade.order.action} {trade.order.totalQuantity} {trade.contract.symbol} [{strategy_symbol}]")
-        # else:
-        #     add_log(f"can only print a pending status change")
 
+        #!TODO: if "Cancel" in status: make sure order is marked as cancelled in ArcticDB
+        # DO WE NEED ORDER TRACKING IN ARCTICDB? We are using orderref anyways??!
+            
+            
     def update_on_trade(self, strategy, trade_details):
         strategy_name = type(strategy).__name__
         # Calculate new cash position
