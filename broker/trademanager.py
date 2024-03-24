@@ -3,8 +3,9 @@ from ib_insync import *
 from gui.log import add_log
 
 class TradeManager:
-    def __init__(self, ib_client):
+    def __init__(self, ib_client,strategy_manager):
         self.ib = ib_client
+        self.strategy_manager = strategy_manager
 
     def trade(self, contract, quantity, order_type='MKT', urgency='Patient', orderRef="", limit=None):
         """
@@ -41,6 +42,15 @@ class TradeManager:
         # Place the order
         trade = self.ib.placeOrder(contract, order)
         self.ib.sleep(1)
+
+        # Notify the strategy manager about the order placement
+        self.strategy_manager.message_queue.put({
+            'type': 'order',
+            'strategy': orderRef,
+            'trade': trade,
+            'contract': contract,
+            'order': order
+        })
         return trade
 
     def roll_future(self, current_contract, new_contract, orderRef=""):

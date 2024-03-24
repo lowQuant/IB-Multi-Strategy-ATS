@@ -15,7 +15,7 @@ class StrategyManager:
         self.ib_client = connect_to_IB(clientid=self.clientId)
         self.strategy_threads = []
         self.strategies = []
-        self.trade_manager = TradeManager(ib_client=self.ib_client)
+        self.trade_manager = TradeManager(ib_client=self.ib_client,strategy_manager=self)
         self.portfolio_manager = PortfolioManager(ib_client=self.ib_client)
         
         # Create a queue for thread safe editing of shared resources (e.g. updating available cash etc.)
@@ -85,15 +85,30 @@ class StrategyManager:
             # Add more message types as needed
             self.message_queue.task_done()
 
+    def notify_order_placement(self, strategy, trade):
+        # Extracting order details for logging
+        symbol = trade.contract.symbol if hasattr(trade.contract, 'symbol') else "N/A"
+        order_type = trade.order.orderType
+        action = trade.order.action
+        quantity = trade.order.totalQuantity
+
+        add_log(f"{order_type} Order placed: {action} {quantity} {symbol} [{strategy}]")
+
+        #!TODO: Save order to ArcticDB
+        # this requires an ArcticDB library or symbol is creating when creating the strategy
+        # also requires a check upon strategy creation that no other strategy with the chosen symbol is in our database
+
+
     def handle_fill_event(self, strategy_symbol, trade, fill):
         # Implement fill event handling logic
         add_log(f"Order filled for {strategy_symbol}: {fill}")
 
     def handle_status_change(self, strategy_symbol, trade, status):
         # Implement status change handling logic
-
-        add_log(f"[{strategy_symbol}]: {status}: {trade.order}")
-        add_log("printing from strategy_manager")
+        if "Pending" not in status: # not interested in pending order actions
+            add_log(f"{status}: {trade.order.action} {trade.order.totalQuantity} {trade.contract.symbol} [{strategy_symbol}]")
+        # else:
+        #     add_log(f"can only print a pending status change")
 
     def update_on_trade(self, strategy, trade_details):
         strategy_name = type(strategy).__name__

@@ -40,7 +40,7 @@ class Strategy:
         
         # Get Data on Strategy Initialization
         self.ib = connect_to_IB(clientid=self.client_id, symbol=self.strategy_symbol)
-        self.trade_manager = TradeManager(self.ib)
+        self.trade_manager = TradeManager(self.ib,self.strategy_manager)
         
         # Position Management
         self.update_investment_status()
@@ -85,7 +85,7 @@ class Strategy:
             self.ib.sleep(1)
             if trade.order:
                 self.ib.cancelOrder(trade.order)
-                break
+                
 
     def disconnect(self):
         # Disconnect logic for the IB client
