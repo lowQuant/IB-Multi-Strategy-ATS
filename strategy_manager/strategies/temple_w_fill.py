@@ -59,15 +59,33 @@ class Strategy:
             'trade': trade,
             'fill': fill
         })
+    
+    def on_status_change(self, trade):
+        # Handle status change event
+        self.strategy_manager.message_queue.put({
+            'type': 'status_change',
+            'strategy': self.strategy_symbol,
+            'trade': trade,
+            'status': trade.orderStatus.status
+        })
 
     def run(self):
-        add_log(f"{self.strategy_symbol} Thread Started")
+        add_log(f"Thread Started [{self.strategy_symbol}]")
         # Add Trading logic
         contract = Stock('AAPL', 'SMART', 'USD')
         trade = self.trade_manager.trade(contract,1,orderRef=self.strategy_symbol)
 
         # Assign callbacks for order updates
         trade.fillEvent += self.on_fill
+        trade.statusEvent += self.on_status_change
+
+        while True:
+            # This integrates the ib_insync event loop
+            # Additional strategy logic here
+            self.ib.sleep(1)
+            if trade.order:
+                self.ib.cancelOrder(trade.order)
+                break
 
     def disconnect(self):
         # Disconnect logic for the IB client

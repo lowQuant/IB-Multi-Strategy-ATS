@@ -91,7 +91,9 @@ class StrategyManager:
 
     def handle_status_change(self, strategy_symbol, trade, status):
         # Implement status change handling logic
-        add_log(f"{status}: {trade.order}")
+
+        add_log(f"[{strategy_symbol}]: {status}: {trade.order}")
+        add_log("printing from strategy_manager")
 
     def update_on_trade(self, strategy, trade_details):
         strategy_name = type(strategy).__name__
