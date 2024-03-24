@@ -5,6 +5,8 @@ from datetime import datetime
 from data_and_research import ac, fetch_strategies
 
 def on_combobox_select(tree, strategy, row_id):
+    '''this function is triggered via click on a strategy field
+       and assigns a strategy to a position in our arcticdb''' # works
     # Get the symbol from the row
     symbol = tree.set(row_id, 'symbol')
     asset_class = tree.set(row_id, 'Asset Class')
@@ -21,9 +23,8 @@ def on_combobox_select(tree, strategy, row_id):
     if not filtered_df.empty:
         # Update the strategy for the filtered rows
         positions_df.loc[filter_cond, 'strategy'] = strategy
-    
-    ac.get_library('portfolio').write('positions', positions_df, metadata={'updated': 'strategy assignment from gui'})
 
+    ac.get_library('portfolio').write('positions', positions_df, metadata={'updated': 'strategy assignment from gui'})
     print(f"Strategy '{strategy}' assigned to position with symbol '{symbol}', asset class '{asset_class}', position {position}")
     
 
@@ -87,7 +88,7 @@ def open_portfolio_window(strategy_manager):
                 df_row = df[(df['symbol'] == symbol) & 
                             (df['asset class'] == asset_class) & 
                             (df['position'] == position)]
-                print(df_row)
+                
                 # If no matching row found in the dataframe, set current_strategy to empty
                 if df_row.empty:
                     current_strategy = ''
@@ -106,11 +107,10 @@ def open_portfolio_window(strategy_manager):
                 # Bind the selection event
                 strategy_cb.bind("<<ComboboxSelected>>", lambda e: on_combobox_select(tree, strategy_cb.get(), row_id))
 
-    def on_right_click(event, tree, df):
+    def on_right_click(event, tree, df,strategy_manager):
         # Identify the row and column that was clicked
         region = tree.identify("region", event.x, event.y)
 
-        
         if region == "cell":
             row_id = tree.identify_row(event.y)
             symbol = tree.set(row_id, 'symbol')
@@ -120,34 +120,30 @@ def open_portfolio_window(strategy_manager):
             menu = tk.Menu(window, tearoff=0)
             # Add a non-clickable menu entry as a title/header
             menu.add_command(label=f"{asset_class}: {position} {symbol}", state="disabled")
-            menu.add_command(label="Delete Entry",command=lambda: delete_strategy(tree, row_id, df))
+            menu.add_command(label="Delete Entry",command=lambda: delete_strategy(tree, row_id, df,strategy_manager))
             menu.post(event.x_root, event.y_root)
 
     window.update_idletasks()  # Update the GUI to ensure treeview is drawn
     tree.bind("<Button-1>", lambda e: on_strategy_cell_click(e, strategies, df))
-    tree.bind("<Button-3>", lambda e: on_right_click(e, tree, df))  # <Button-3> is typically the right-click button
-    tree.bind("<Button-2>", lambda e: on_right_click(e, tree, df))
+    tree.bind("<Button-3>", lambda e: on_right_click(e, tree, df,strategy_manager))  # <Button-3> is typically the right-click button
+    tree.bind("<Button-2>", lambda e: on_right_click(e, tree, df,strategy_manager))
 
     scrollbar.config(command=tree.yview)
 
-def delete_strategy(tree, row_id, df):
+def delete_strategy(tree, row_id, df,strategy_manager):
     # Here you would handle the deletion of the strategy entry from the database
     symbol = tree.set(row_id, 'symbol')
     asset_class = tree.set(row_id, 'Asset Class')
     position = tree.set(row_id,'position')
+    strategy = tree.set(row_id, 'strategy')
 
-    print(symbol, asset_class, "deleting")
-
-    lib = ac.get_library('portfolio')
-    df = lib.read('positions').data
-    latest_positions = df.sort_values(by='timestamp').groupby(['symbol', 'strategy', 'asset class']).last().reset_index()
+    strategy_manager.portfolio_manager.delete_symbol(symbol,asset_class,position,strategy)
     
-    # ...perform deletion from ArcticDB using symbol and asset class as keys
+    print(f"Entry marked as deleted: {symbol} {asset_class} position {position} , strategy {strategy}")
 
 def get_portfolio_data(strategy_manager):
     df = strategy_manager.portfolio_manager.get_ib_positions_for_gui()
     data_list = df.to_dict('records')
-    # print(data_list)
     return data_list
 
 def get_strategies(arctic_lib):

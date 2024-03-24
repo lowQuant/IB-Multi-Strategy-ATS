@@ -4,13 +4,15 @@ import pandas as pd
 from ib_insync import *
 from gui.log import add_log
 import datetime
-from data_and_research import ac
+import yfinance as yf
+from data_and_research import ac, initialize_db
 
 class PortfolioManager:
     def __init__(self, ib_client: IB):
         self.ib = ib_client
         self.fx_cache = {}
         self.base = [entry.currency for entry in self.ib.accountSummary() if entry.tag == "EquityWithLoanValue"][0]
+        # self.library = initialize_db('db').get_library('portfolio', create_if_missing=True) # ac.get_library('portfolio', create_if_missing=True)
         self.library = ac.get_library('portfolio', create_if_missing=True)
 
     def convert_marketValue_to_base(self,df):
@@ -47,7 +49,13 @@ class PortfolioManager:
                 if type(price.marketPrice()) == int:
                     self.fx_cache[(currency, base_currency)] = price.marketPrice()
                 else:
-                    self.fx_cache[(currency, base_currency)] = price.close
+                    if type(price.close) == int:
+                        self.fx_cache[(currency, base_currency)] = price.close
+                    else:
+                        print("Using YF to get fx quote. Check IB connection for market data subscription. ")
+                        ticker = f"{base_currency}{currency}=X"
+                        rate = yf.Ticker(ticker).info['ask']
+                        self.fx_cache[(currency, base_currency)] = rate
 
         return self.fx_cache[(currency, base_currency)]
 
@@ -146,8 +154,9 @@ class PortfolioManager:
             'contract': row['contract'],
             'trade': None,
             'open_dt': datetime.date.today().isoformat(),
-            'close_dt': None,
+            'close_dt': '',
             'deleted': False,
+            'delete_dt': '',
             'marketValue': residual_market_value,
             'unrealizedPNL': (market_price - residual_avg_cost) * residual_position,
             'currency': row.currency,
@@ -196,8 +205,9 @@ class PortfolioManager:
                             'contract': item.contract,
                             'trade': None,
                             'open_dt':datetime.date.today().isoformat(),
-                            'close_dt': None,
+                            'close_dt': '',
                             'deleted': False,
+                            'delete_dt': '',
                             'marketValue': item.marketValue,
                             'unrealizedPNL': item.unrealizedPNL,
                             'currency':item.contract.currency,
@@ -244,15 +254,16 @@ class PortfolioManager:
     def match_ib_positions_with_arcticdb(self):
         if 'positions' in self.library.list_symbols():
             df_ac = self.library.read('positions').data
+            # Filter out deleted entries before comparing
+            df_ac_active = df_ac[df_ac['deleted'] != True].copy()
+            latest_positions_in_ac = df_ac_active.sort_values(by='timestamp').groupby(['symbol', 'strategy', 'asset class']).last().reset_index()
         else:
             print("Msg from function 'match_ib_positions_with_arcticdb': No Symbol 'positions' in library 'portfolio'")
             df_ib = self.get_positions_from_ib()
             self.save_positions(df_ib)
             return df_ib
 
-        latest_positions_in_ac = df_ac.sort_values(by='timestamp').groupby(['symbol', 'strategy', 'asset class']).last().reset_index()
         df_ib = self.get_positions_from_ib()
-
         df_merged = pd.DataFrame()
 
         # Iterate through the positions obtained from Interactive Brokers
@@ -301,12 +312,39 @@ class PortfolioManager:
     def save_positions(self, df_merged):
         df_merged = self.normalize_columns(df_merged)
         if 'positions' in self.library.list_symbols():
-            self.library.append('positions', df_merged,prune_previous_versions=True,validate_index=False)
+            self.library.append('positions', df_merged,prune_previous_versions=True,validate_index=True)
         else:
             print("Creating an arcticdb entry 'positions' in library 'portfolio'")
-            self.library.write('positions',df_merged,prune_previous_versions = True,  validate_index=False)
-                
+            self.library.write('positions',df_merged,prune_previous_versions = True,  validate_index=True)
+    
+    def delete_symbol(self,symbol, asset_class, position, strategy):
+        ''' A function that deletes an ArcticDB entry based on provided params:
+            -symbol, asset_class, position & strategy'''
+        
+        df = self.library.read('positions').data
+
+        # Filter for matching entries that have not been previously marked as deleted
+        filter_condition = (df['symbol'] == symbol) & \
+                        (df['asset class'] == asset_class) & \
+                        (df['position'] == float(position)) & \
+                        (df['strategy'] == strategy) & \
+                        (df['deleted'] == False)
+
+        # Mark the filtered entries as deleted and add the current timestamp
+        df.loc[filter_condition, 'deleted'] = True
+        df.loc[filter_condition, 'delete_dt'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')  # Convert to string
+
+        # Save the updated DataFrame back to ArcticDB
+        df = self.normalize_columns(df)
+        self.library.write('positions', df, prune_previous_versions=True)
+
+        print(f"Deleted positions for {symbol} {asset_class} with position {position}")
+
     def normalize_columns(self, df):
+        df = df.copy()
         df['contract'] = df['contract'].astype(str)
         df['trade'] = df['trade'].astype(str)
         return df
+    
+    def delete_symbol_from_portfolio_lib(self,symbol):
+        self.library.delete(symbol)

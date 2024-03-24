@@ -15,7 +15,7 @@ PARAMS = {"VIX Threshold": 16.5, "Contango":True}
         # Assign callbacks for order updates and code the functions in trade_manager which sends updates to strategy_manager
         # trade.fillEvent += self.trade_manager.on_fill
         # trade.statusEvent += self.trade_manager.on_status_change 
-
+ 
 strategy = None
 
 def manage_strategy(client_id, strategy_manager):
