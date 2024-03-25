@@ -59,8 +59,6 @@ def open_portfolio_window(strategy_manager):
     info_and_controls_frame = tk.Frame(account_info_frame)
     info_and_controls_frame.pack(side=tk.RIGHT, fill=tk.X, expand=True)
 
-    # Pack the refresh button next to the date label, also on the right side
-
     date_label = tk.Label(info_and_controls_frame, text=f"Date: {datetime.now().strftime('%Y-%m-%d')}")
     date_label.pack(side=tk.RIGHT, padx=5)
 
@@ -68,26 +66,10 @@ def open_portfolio_window(strategy_manager):
                             command=lambda: refresh_portfolio_data(tree, strategy_manager))
     refresh_button.pack(side=tk.RIGHT, padx=5)
 
-
-
     # Pack the account info labels into the account_info_frame, aligned to the left
     tk.Label(account_info_frame, text=f"NAV: {total_equity:.2f}").pack(side=tk.LEFT)
     tk.Label(account_info_frame, text=f" Cash: {cash:.2f}").pack(side=tk.LEFT)
     tk.Label(account_info_frame, text=f" Margin: {margin:.2f}").pack(side=tk.LEFT)
-
-    # # Create a frame for account information
-    # account_info_frame = tk.Frame(window)
-    # account_info_frame.pack(side=tk.BOTTOM, fill=tk.X)
-
-    # # Labels for account information
-    # tk.Label(account_info_frame, text=f"NAV: {total_equity:.2f}").pack(side=tk.LEFT)
-    # tk.Label(account_info_frame, text=f"  Cash: {cash:.2f}").pack(side=tk.LEFT)
-    # tk.Label(account_info_frame, text=f"  Margin: {margin:.2f}").pack(side=tk.LEFT)
-    # tk.Label(account_info_frame, text=f"Date: {datetime.now().strftime('%Y-%m-%d')}").pack(side=tk.RIGHT)
-
-    # # Refresh Button
-    # refresh_button = tk.Button(account_info_frame, text="Refresh", compound=tk.RIGHT, command=lambda: refresh_portfolio_data(tree, strategy_manager))
-    # refresh_button.pack(side=tk.RIGHT, padx=0)  # Adjust the side and padding as needed
 
     portfolio_data = get_portfolio_data(strategy_manager)  # Fetch the data
     df = pd.DataFrame(portfolio_data)
@@ -162,6 +144,8 @@ def open_portfolio_window(strategy_manager):
             # Add a non-clickable menu entry as a title/header
             menu.add_command(label=f"{asset_class}: {position} {symbol}", state="disabled")
             menu.add_command(label="Delete Entry",command=lambda: delete_strategy(tree, row_id, df,strategy_manager))
+            menu.add_command(label="Refresh View",command=lambda: refresh_portfolio_data(tree, strategy_manager))
+
             menu.post(event.x_root, event.y_root)
 
     window.update_idletasks()  # Update the GUI to ensure treeview is drawn

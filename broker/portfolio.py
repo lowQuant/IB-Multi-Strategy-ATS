@@ -221,8 +221,12 @@ class PortfolioManager:
         df = pd.DataFrame(portfolio_data)
 
         # populates columns 'marketValue_base' and 'fx_rate'
-        df = self.convert_marketValue_to_base(df)
-        df['% of nav'] = df['% of nav'] / df.fx_rate
+        try:
+            df = self.convert_marketValue_to_base(df)
+            df['% of nav'] = df['% of nav'] / df.fx_rate
+        except:
+            pass
+            #!TODO: think of better error handling
         return df
     
     def get_ib_positions_for_gui(self):

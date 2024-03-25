@@ -24,13 +24,10 @@ class StrategyManager:
         self.message_processor_thread.daemon = True
         self.message_processor_thread.start()
 
-        self.load_strategies()
-        #TODO: only start ocne all strategies are loaded
-        #TODO: load data before
-
     def load_strategies(self):
         '''loads all active strategies that the user added via the Settings/Strategies Menu
             & stores them in self.strategies'''
+        self.strategies.clear()
         strategy_dir = "strategy_manager/strategies"
         strategy_names, self.strategy_df = fetch_strategies()
         active_filenames = set(self.strategy_df[self.strategy_df["active"] == "True"]['filename'])
@@ -58,6 +55,7 @@ class StrategyManager:
             print("Loaded strategies:", [module_name])
 
     def start_all(self):
+        self.load_strategies()
         for strategy_module in self.strategies:
             if hasattr(strategy_module, 'manage_strategy'):
                 self.clientId += 1
@@ -68,15 +66,17 @@ class StrategyManager:
             else:
                 print(f"Strategy {type(strategy_module).__name__} does not have a manage_strategy function.")
 
-    def  disconnect(self):
-         # Disconnecting the StrategyManager itself
-        disconnect_from_IB(ib=self.ib_client)
-        self.stop_all()
-
     def stop_all(self):
         # Implement logic to gracefully stop all strategies
         for thread in self.strategy_threads:
             thread.join(timeout=5)
+        self.strategy_threads = []
+        self.strategies = []  # Clear loaded strategy modules
+        
+    def  disconnect(self):
+         # Disconnecting the StrategyManager itself
+        disconnect_from_IB(ib=self.ib_client)
+        self.stop_all()
 
     def process_messages(self):
         while True:
@@ -116,7 +116,7 @@ class StrategyManager:
         #!TODO: if "Cancel" in status: make sure order is marked as cancelled in ArcticDB
         # DO WE NEED ORDER TRACKING IN ARCTICDB? We are using orderref anyways??!
             
-            
+
     def update_on_trade(self, strategy, trade_details):
         strategy_name = type(strategy).__name__
         # Calculate new cash position
