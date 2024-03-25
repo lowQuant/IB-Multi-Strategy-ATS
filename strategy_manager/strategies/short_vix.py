@@ -52,9 +52,10 @@ class Strategy:
 
         # Get Data on Strategy Initialization
         self.ib = connect_to_IB(clientid=self.client_id, symbol=self.strategy_symbol)
-        self.trade_manager = TradeManager(ib_client=self.ib)
+        self.trade_manager = TradeManager(ib_client=self.ib,strategy_manager=self.strategy_manager)
 
         self.term_structure = get_term_structure(self.instrument_symbol,"VIX",ib=self.ib)
+        print(self.term_structure)
         self.volatility_risk_premium = self.download_vix_and_spy_data()["VRP"].iloc[-1]
         self.is_contango = self.is_contango()
         

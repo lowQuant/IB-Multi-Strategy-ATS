@@ -26,7 +26,22 @@ def on_combobox_select(tree, strategy, row_id):
 
     ac.get_library('portfolio').write('positions', positions_df, metadata={'updated': 'strategy assignment from gui'})
     print(f"Strategy '{strategy}' assigned to position with symbol '{symbol}', asset class '{asset_class}', position {position}")
+
+def refresh_portfolio_data(tree, strategy_manager):
+    # Fetch the updated portfolio data
+    portfolio_data = get_portfolio_data(strategy_manager)
+    df = pd.DataFrame(portfolio_data)
     
+    # Clear the current tree view contents
+    for i in tree.get_children():
+        tree.delete(i)
+    
+    # Re-populate the tree view with the new data
+    for item in portfolio_data:
+        tree.insert("", tk.END, values=(item["symbol"], item["asset class"], item["position"],
+                                        item['currency'], f"{item['% of nav']:.2f}", 
+                                        f"{item['marketPrice']:.2f}", f"{item['averageCost']:.2f}",
+                                        f"{item['pnl %']:.2f}", item['strategy']))    
 
 def open_portfolio_window(strategy_manager):
     window = tk.Toplevel()
@@ -38,15 +53,41 @@ def open_portfolio_window(strategy_manager):
     total_equity = sum(float(entry.value) for entry in strategy_manager.ib_client.accountSummary() if entry.tag == "EquityWithLoanValue")
     margin = sum(float(entry.value) for entry in strategy_manager.ib_client.accountSummary() if entry.tag == "InitMarginReq")
 
-    # Create a frame for account information
     account_info_frame = tk.Frame(window)
     account_info_frame.pack(side=tk.BOTTOM, fill=tk.X)
+    # Create a new frame within account_info_frame for better control over widget placement
+    info_and_controls_frame = tk.Frame(account_info_frame)
+    info_and_controls_frame.pack(side=tk.RIGHT, fill=tk.X, expand=True)
 
-    # Labels for account information
+    # Pack the refresh button next to the date label, also on the right side
+
+    date_label = tk.Label(info_and_controls_frame, text=f"Date: {datetime.now().strftime('%Y-%m-%d')}")
+    date_label.pack(side=tk.RIGHT, padx=5)
+
+    refresh_button = tk.Button(info_and_controls_frame, text="Refresh", compound=tk.RIGHT,
+                            command=lambda: refresh_portfolio_data(tree, strategy_manager))
+    refresh_button.pack(side=tk.RIGHT, padx=5)
+
+
+
+    # Pack the account info labels into the account_info_frame, aligned to the left
     tk.Label(account_info_frame, text=f"NAV: {total_equity:.2f}").pack(side=tk.LEFT)
-    tk.Label(account_info_frame, text=f"  Cash: {cash:.2f}").pack(side=tk.LEFT)
-    tk.Label(account_info_frame, text=f"  Margin: {margin:.2f}").pack(side=tk.LEFT)
-    tk.Label(account_info_frame, text=f"Date: {datetime.now().strftime('%Y-%m-%d')}").pack(side=tk.RIGHT)
+    tk.Label(account_info_frame, text=f" Cash: {cash:.2f}").pack(side=tk.LEFT)
+    tk.Label(account_info_frame, text=f" Margin: {margin:.2f}").pack(side=tk.LEFT)
+
+    # # Create a frame for account information
+    # account_info_frame = tk.Frame(window)
+    # account_info_frame.pack(side=tk.BOTTOM, fill=tk.X)
+
+    # # Labels for account information
+    # tk.Label(account_info_frame, text=f"NAV: {total_equity:.2f}").pack(side=tk.LEFT)
+    # tk.Label(account_info_frame, text=f"  Cash: {cash:.2f}").pack(side=tk.LEFT)
+    # tk.Label(account_info_frame, text=f"  Margin: {margin:.2f}").pack(side=tk.LEFT)
+    # tk.Label(account_info_frame, text=f"Date: {datetime.now().strftime('%Y-%m-%d')}").pack(side=tk.RIGHT)
+
+    # # Refresh Button
+    # refresh_button = tk.Button(account_info_frame, text="Refresh", compound=tk.RIGHT, command=lambda: refresh_portfolio_data(tree, strategy_manager))
+    # refresh_button.pack(side=tk.RIGHT, padx=0)  # Adjust the side and padding as needed
 
     portfolio_data = get_portfolio_data(strategy_manager)  # Fetch the data
     df = pd.DataFrame(portfolio_data)

@@ -71,6 +71,12 @@ class StrategyManager:
     def  disconnect(self):
          # Disconnecting the StrategyManager itself
         disconnect_from_IB(ib=self.ib_client)
+        self.stop_all()
+
+    def stop_all(self):
+        # Implement logic to gracefully stop all strategies
+        for thread in self.strategy_threads:
+            thread.join(timeout=5)
 
     def process_messages(self):
         while True:
@@ -97,7 +103,6 @@ class StrategyManager:
         #!TODO: Save order to ArcticDB
         # this requires an ArcticDB library or symbol is creating when creating the strategy
         # also requires a check upon strategy creation that no other strategy with the chosen symbol is in our database
-
 
     def handle_fill_event(self, strategy_symbol, trade, fill):
         # Implement fill event handling logic

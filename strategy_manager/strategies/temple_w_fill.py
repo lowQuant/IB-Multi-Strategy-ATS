@@ -73,7 +73,7 @@ class Strategy:
         add_log(f"Thread Started [{self.strategy_symbol}]")
         # Add Trading logic
         contract = Stock('AAPL', 'SMART', 'USD')
-        trade = self.trade_manager.trade(contract,1,orderRef=self.strategy_symbol)
+        trade = self.trade_manager.trade(contract,1,order_type='LMT',orderRef=self.strategy_symbol, limit=0.99)
 
         # Assign callbacks for order updates
         trade.fillEvent += self.on_fill
