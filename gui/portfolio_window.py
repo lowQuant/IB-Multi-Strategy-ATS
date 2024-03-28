@@ -86,7 +86,9 @@ def create_info_bar(strategy_manager,tab_control):
     tk.Label(account_info_frame, text=f" Cash: {cash:.2f}").pack(side=tk.LEFT)
     tk.Label(account_info_frame, text=f" Margin: {margin:.2f}").pack(side=tk.LEFT)
 
-def populate_portfolio_tab(window,strategy_manager,portfolio_tab):
+    return info_and_controls_frame
+
+def populate_portfolio_tab(window,strategy_manager,portfolio_tab,info_and_controls_frame):
     portfolio_data = get_portfolio_data(strategy_manager)  # Fetch the data
     df = pd.DataFrame(portfolio_data)
     strategies,_ = fetch_strategies()  # Fetch list of strategies
@@ -110,6 +112,9 @@ def populate_portfolio_tab(window,strategy_manager,portfolio_tab):
     for item in portfolio_data:
         row_id = tree.insert("", tk.END, values=(item["symbol"], item["asset class"], item["position"], item['currency'],f"{item['% of nav']:.2f}",
                             f"{item['marketPrice']:.2f}", f"{item['averageCost']:.2f}", f"{item['pnl %']:.2f}",item['strategy']))
+
+    refresh_button = tk.Button(info_and_controls_frame, text="Refresh", command=lambda: refresh_portfolio_data(tree, strategy_manager))
+    refresh_button.pack(side=tk.RIGHT, padx=5)
 
     # Add a strategy dropdown for each row in a separate column
     def on_strategy_cell_click(event, strategies, df):
@@ -199,9 +204,9 @@ def open_portfolio_window(strategy_manager):
     tab_control.add(performance_tab, text='Performance')
     tab_control.pack(expand=1, fill="both")
 
-    create_info_bar(strategy_manager,tab_control)
+    info_and_controls_frame = create_info_bar(strategy_manager,tab_control)
 
-    populate_portfolio_tab(window,strategy_manager,portfolio_tab)
+    populate_portfolio_tab(window,strategy_manager,portfolio_tab,info_and_controls_frame)
     populate_performance_tab(window,strategy_manager,performance_tab)
 
 def delete_strategy(tree, row_id, df,strategy_manager):
