@@ -58,6 +58,10 @@ def initialize_db(db_path):
         print("Creating library 'portfolio' that will keep track of our strategies' positions")
         library = ac.get_library('portfolio', create_if_missing=True, library_options=LIBRARY_OPTIONS)
     
+    if not "pnl" in ac.list_libraries():
+        print("Creating library 'pnl' that will keep track of strategy & account PnL")
+        library = ac.get_library('pnl', create_if_missing=True)
+
     # Create other libraries here later (e.g. universe, stocks, futures etc.) 
     return ac
 

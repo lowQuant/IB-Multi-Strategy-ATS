@@ -3,6 +3,8 @@ from tkinter import ttk
 import pandas as pd
 from datetime import datetime
 from data_and_research import ac, fetch_strategies
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 def on_combobox_select(tree, strategy, row_id):
     '''this function is triggered via click on a strategy field
@@ -43,46 +45,60 @@ def refresh_portfolio_data(tree, strategy_manager):
                                         f"{item['marketPrice']:.2f}", f"{item['averageCost']:.2f}",
                                         f"{item['pnl %']:.2f}", item['strategy']))    
 
-def open_portfolio_window(strategy_manager):
-    window = tk.Toplevel()
-    window.title("Portfolio")
-    window.geometry("800x400")
+def show_pnl_graph(strategy_manager, window):
+    # Here you would retrieve PnL data from ArcticDB and plot it
+    pnl_lib = ac.get_library('pnl')
+    pnl_df = pnl_lib.read(strategy_manager.ib_client.managedAccounts()[0]).data
+    #pnl_df.set_index('timestamp', inplace=True)
+    
+    fig, ax = plt.subplots()
+    pnl_df['total_equity'].plot(ax=ax)  # Plotting the total equity column
+    ax.set_title('PnL Graph')
+    ax.set_xlabel('Date')
+    ax.set_ylabel('Total Equity')
+    
+    # Embed the plot into the Tkinter window
+    canvas = FigureCanvasTkAgg(fig, master=window)  
+    canvas_widget = canvas.get_tk_widget()
+    canvas_widget.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+    canvas.draw()
 
+def create_info_bar(strategy_manager,tab_control):
     # Fetch the account values
     cash = sum(float(entry.value) for entry in strategy_manager.ib_client.accountSummary() if entry.tag == "TotalCashValue")
     total_equity = sum(float(entry.value) for entry in strategy_manager.ib_client.accountSummary() if entry.tag == "EquityWithLoanValue")
     margin = sum(float(entry.value) for entry in strategy_manager.ib_client.accountSummary() if entry.tag == "InitMarginReq")
 
-    account_info_frame = tk.Frame(window)
+    account_info_frame = tk.Frame(tab_control)
     account_info_frame.pack(side=tk.BOTTOM, fill=tk.X)
-    # Create a new frame within account_info_frame for better control over widget placement
+
     info_and_controls_frame = tk.Frame(account_info_frame)
     info_and_controls_frame.pack(side=tk.RIGHT, fill=tk.X, expand=True)
 
     date_label = tk.Label(info_and_controls_frame, text=f"Date: {datetime.now().strftime('%Y-%m-%d')}")
     date_label.pack(side=tk.RIGHT, padx=5)
 
-    refresh_button = tk.Button(info_and_controls_frame, text="Refresh", compound=tk.RIGHT,
-                            command=lambda: refresh_portfolio_data(tree, strategy_manager))
-    refresh_button.pack(side=tk.RIGHT, padx=5)
+    # refresh_button = tk.Button(info_and_controls_frame, text="Refresh", command=lambda: refresh_portfolio_data(tree, strategy_manager))
+    # refresh_button.pack(side=tk.RIGHT, padx=5)
 
-    # Pack the account info labels into the account_info_frame, aligned to the left
+    # Pack the NAV, Cash, and Margin labels into the account_info_frame
     tk.Label(account_info_frame, text=f"NAV: {total_equity:.2f}").pack(side=tk.LEFT)
     tk.Label(account_info_frame, text=f" Cash: {cash:.2f}").pack(side=tk.LEFT)
     tk.Label(account_info_frame, text=f" Margin: {margin:.2f}").pack(side=tk.LEFT)
 
+def populate_portfolio_tab(window,strategy_manager,portfolio_tab):
     portfolio_data = get_portfolio_data(strategy_manager)  # Fetch the data
     df = pd.DataFrame(portfolio_data)
     strategies,_ = fetch_strategies()  # Fetch list of strategies
     strategies.append("")
 
     # Add a scrollbar
-    scrollbar = tk.Scrollbar(window)
+    scrollbar = tk.Scrollbar(portfolio_tab)
     scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
     # Create the treeview
     columns = ("symbol", "Asset Class", "position", "FX" ,"Weight (%)",'Price','Cost','pnl %',"strategy")
-    tree = ttk.Treeview(window, columns=columns, show='headings', yscrollcommand=scrollbar.set)
+    tree = ttk.Treeview(portfolio_tab, columns=columns, show='headings', yscrollcommand=scrollbar.set)
     tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
     # Define the column headings
@@ -123,12 +139,18 @@ def open_portfolio_window(strategy_manager):
                 pady = height // 2
                 
                 # Create the Combobox widget
-                strategy_cb = ttk.Combobox(window, values=strategies)
+                strategy_cb = ttk.Combobox(portfolio_tab, values=strategies)
                 strategy_cb.place(x=x, y=y+pady, anchor="w", width=width)
                 strategy_cb.set(current_strategy)
 
                 # Bind the selection event
                 strategy_cb.bind("<<ComboboxSelected>>", lambda e: on_combobox_select(tree, strategy_cb.get(), row_id))
+
+    window.update_idletasks()  # Update the GUI to ensure treeview is drawn
+    tree.bind("<Button-1>", lambda e: on_strategy_cell_click(e, strategies, df))
+    tree.bind("<Button-3>", lambda e: on_right_click(e, tree, df,strategy_manager))  # <Button-3> is typically the right-click button
+
+    scrollbar.config(command=tree.yview)
 
     def on_right_click(event, tree, df,strategy_manager):
         # Identify the row and column that was clicked
@@ -148,12 +170,39 @@ def open_portfolio_window(strategy_manager):
 
             menu.post(event.x_root, event.y_root)
 
-    window.update_idletasks()  # Update the GUI to ensure treeview is drawn
-    tree.bind("<Button-1>", lambda e: on_strategy_cell_click(e, strategies, df))
-    tree.bind("<Button-3>", lambda e: on_right_click(e, tree, df,strategy_manager))  # <Button-3> is typically the right-click button
-    tree.bind("<Button-2>", lambda e: on_right_click(e, tree, df,strategy_manager))
+def populate_performance_tab(window,strategy_manager,performance_tab):
+    pnl_lib = ac.get_library('pnl')
+    pnl_df = pnl_lib.read(strategy_manager.ib_client.managedAccounts()[0]).data
 
-    scrollbar.config(command=tree.yview)
+    fig, ax = plt.subplots()
+    pnl_df['total_equity'].plot(ax=ax)  # Plotting the total equity column
+    ax.set_ylabel('Account Equity')
+    
+    # Embed the plot into the Tkinter window
+    canvas = FigureCanvasTkAgg(fig, master=performance_tab)  
+    canvas_widget = canvas.get_tk_widget()
+    canvas_widget.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+    canvas.draw()
+
+def open_portfolio_window(strategy_manager):
+    window = tk.Toplevel()
+    window.title("Portfolio")
+    window.geometry("900x450")
+
+    # Create a Notebook widget & frames for each tab
+    tab_control = ttk.Notebook(window)
+    portfolio_tab = ttk.Frame(tab_control)
+    performance_tab = ttk.Frame(tab_control)
+
+    # Add tabs to the Notebook
+    tab_control.add(portfolio_tab, text='Portfolio')
+    tab_control.add(performance_tab, text='Performance')
+    tab_control.pack(expand=1, fill="both")
+
+    create_info_bar(strategy_manager,tab_control)
+
+    populate_portfolio_tab(window,strategy_manager,portfolio_tab)
+    populate_performance_tab(window,strategy_manager,performance_tab)
 
 def delete_strategy(tree, row_id, df,strategy_manager):
     # Here you would handle the deletion of the strategy entry from the database
