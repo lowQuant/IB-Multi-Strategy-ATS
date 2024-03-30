@@ -13,7 +13,10 @@ class PortfolioManager:
         self.fx_cache = {}
         self.base = [entry.currency for entry in self.ib.accountSummary() if entry.tag == "EquityWithLoanValue"][0]
         # self.library = initialize_db('db').get_library('portfolio', create_if_missing=True) # ac.get_library('portfolio', create_if_missing=True)
-        self.library = ac.get_library('portfolio', create_if_missing=True)
+        self.portfolio_library = ac.get_library('portfolio', create_if_missing=True)
+        self.pnl_library = ac.get_library('pnl', create_if_missing=True)
+        self.account_id = self.ib.managedAccounts()[0]
+        self.total_equity =  sum(float(entry.value) for entry in self.ib.accountSummary() if entry.tag == "EquityWithLoanValue")
 
     def convert_marketValue_to_base(self,df):
         """returns a DataFrame with 'marketValue_base' column
@@ -79,7 +82,7 @@ class PortfolioManager:
             return base_value
     
     def update_data(self,output_df,row):
-        total_equity =  sum(float(entry.value) for entry in self.ib.accountSummary() if entry.tag == "EquityWithLoanValue")
+        self.total_equity =  sum(float(entry.value) for entry in self.ib.accountSummary() if entry.tag == "EquityWithLoanValue")
         output_df = output_df.copy()
         output_df['timestamp'] = row['timestamp']
         output_df['marketPrice'] = row['marketPrice']
@@ -88,7 +91,7 @@ class PortfolioManager:
 
         output_df['unrealizedPNL'] = output_df['marketPrice'] - output_df['averageCost']
         output_df['marketValue'] = (output_df['marketPrice'] * output_df['position']) 
-        output_df['% of nav'] = (output_df['marketValue_base'] / total_equity) * 100
+        output_df['% of nav'] = (output_df['marketValue_base'] / self.total_equity) * 100
         return output_df
 
     def calculate_pnl(self,market_price, average_cost, position, contract=None):
@@ -256,8 +259,8 @@ class PortfolioManager:
         return df_ib
 
     def match_ib_positions_with_arcticdb(self):
-        if 'positions' in self.library.list_symbols():
-            df_ac = self.library.read('positions').data
+        if 'positions' in self.portfolio_library.list_symbols():
+            df_ac = self.portfolio_library.read('positions').data
             # Filter out deleted entries before comparing
             df_ac_active = df_ac[df_ac['deleted'] != True].copy()
             latest_positions_in_ac = df_ac_active.sort_values(by='timestamp').groupby(['symbol', 'strategy', 'asset class']).last().reset_index()
@@ -311,21 +314,38 @@ class PortfolioManager:
                     df_merged = pd.concat([df_merged, residual], ignore_index=True)
 
         self.save_positions(df_merged)
+        self.save_account_pnl()
         return df_merged
     
+    def save_account_pnl(self):
+        """Saves the PnL (equity value) to the ArcticDB."""
+        current_time = datetime.datetime.now().replace(second=0, microsecond=0)
+        
+        pnl_data = {'total_equity': self.total_equity,'account_id': self.account_id}
+        pnl_df = pd.DataFrame([pnl_data], index=[current_time])
+        try:
+            # Append the new data to the 'pnl' library, creating it if it doesn't exist
+            if self.account_id in self.pnl_library.list_symbols():
+                self.pnl_library.append(self.account_id, pnl_df)
+            else:
+                self.pnl_library.write(self.account_id, pnl_df)
+            print(f"Equity value saved to 'pnl' library for account {self.account_id}")
+        except Exception as e:
+            print(f"Error saving equity value to 'pnl' library: {e}")
+
     def save_positions(self, df_merged):
         df_merged = self.normalize_columns(df_merged)
-        if 'positions' in self.library.list_symbols():
-            self.library.append('positions', df_merged,prune_previous_versions=True,validate_index=True)
+        if 'positions' in self.portfolio_library.list_symbols():
+            self.portfolio_library.append('positions', df_merged,prune_previous_versions=True,validate_index=True)
         else:
             print("Creating an arcticdb entry 'positions' in library 'portfolio'")
-            self.library.write('positions',df_merged,prune_previous_versions = True,  validate_index=True)
+            self.portfolio_library.write('positions',df_merged,prune_previous_versions = True,  validate_index=True)
     
     def delete_symbol(self,symbol, asset_class, position, strategy):
         ''' A function that deletes an ArcticDB entry based on provided params:
             -symbol, asset_class, position & strategy'''
         
-        df = self.library.read('positions').data
+        df = self.portfolio_library.read('positions').data
 
         # Filter for matching entries that have not been previously marked as deleted
         filter_condition = (df['symbol'] == symbol) & \
@@ -340,7 +360,7 @@ class PortfolioManager:
 
         # Save the updated DataFrame back to ArcticDB
         df = self.normalize_columns(df)
-        self.library.write('positions', df, prune_previous_versions=True)
+        self.portfolio_library.write('positions', df, prune_previous_versions=True)
 
         print(f"Deleted positions for {symbol} {asset_class} with position {position}")
 
@@ -351,4 +371,4 @@ class PortfolioManager:
         return df
     
     def delete_symbol_from_portfolio_lib(self,symbol):
-        self.library.delete(symbol)
+        self.portfolio_library.delete(symbol)
