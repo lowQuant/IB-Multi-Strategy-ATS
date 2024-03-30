@@ -46,55 +46,70 @@ def refresh_portfolio_data(tree, strategy_manager):
 def open_portfolio_window(strategy_manager):
     window = tk.Toplevel()
     window.title("Portfolio")
-    window.geometry("800x400")
+    window.geometry("1000x600")
 
-    # Fetch the account values
-    cash = sum(float(entry.value) for entry in strategy_manager.ib_client.accountSummary() if entry.tag == "TotalCashValue")
-    total_equity = sum(float(entry.value) for entry in strategy_manager.ib_client.accountSummary() if entry.tag == "EquityWithLoanValue")
-    margin = sum(float(entry.value) for entry in strategy_manager.ib_client.accountSummary() if entry.tag == "InitMarginReq")
+    # Top-level menu bar with "Performance" submenu
+    menu_bar = tk.Menu(window)
+    window.config(menu=menu_bar)
 
+    # "Performance" submenu
+    performance_menu = tk.Menu(menu_bar, tearoff=0)
+    menu_bar.add_cascade(label="Performance", menu=performance_menu)
+    performance_menu.add_command(label="Show PnL Graph", command=lambda: show_pnl_graph(strategy_manager, window))
+
+    # Main frame for the Notebook (tab container)
+    main_frame = tk.Frame(window)
+    main_frame.pack(fill="both", expand=True)
+
+    # Notebook (tabbed interface)
+    tab_control = ttk.Notebook(main_frame)
+
+    # Portfolio tab
+    portfolio_tab = ttk.Frame(tab_control)
+    tab_control.add(portfolio_tab, text='Portfolio')
+
+    # Performance tab
+    performance_tab = ttk.Frame(tab_control)
+    tab_control.add(performance_tab, text='Performance')
+    tab_control.pack(expand=1, fill="both")
+
+    # Treeview for portfolio data
+    columns = ("Symbol", "Asset Class", "Position", "FX", "Weight (%)", "Price", "Cost", "Pnl %", "Strategy")
+    tree = ttk.Treeview(portfolio_tab, columns=columns, show='headings')
+    for col, w in zip(columns, [50, 120, 60, 50, 60, 60, 60, 60, 100]):
+        tree.column(col, stretch=tk.YES, minwidth=0, width=w)
+        tree.heading(col, text=col.capitalize())
+    tree.pack(side=tk.LEFT, fill="both", expand=True)
+
+    # Scrollbar for treeview
+    scrollbar = ttk.Scrollbar(portfolio_tab, orient="vertical", command=tree.yview)
+    scrollbar.pack(side=tk.RIGHT, fill='y')
+    tree.configure(yscrollcommand=scrollbar.set)
+
+    # Fetch and display portfolio data in the treeview
+    portfolio_data = get_portfolio_data(strategy_manager)  # This function should be defined elsewhere
+    df = pd.DataFrame(portfolio_data)
+    strategies,_ = fetch_strategies()  # Fetch list of strategies
+    strategies.append("")  # This function should be defined elsewhere
+    for item in portfolio_data:
+        tree.insert("", tk.END, values=(
+            item["symbol"], item["asset class"], item["position"],
+            item["currency"], f"{item['% of nav']:.2f}", f"{item['marketPrice']:.2f}",
+            f"{item['averageCost']:.2f}", f"{item['pnl %']:.2f}", item["strategy"]
+        ))
+
+    # Add account info at the bottom
     account_info_frame = tk.Frame(window)
     account_info_frame.pack(side=tk.BOTTOM, fill=tk.X)
-    # Create a new frame within account_info_frame for better control over widget placement
-    info_and_controls_frame = tk.Frame(account_info_frame)
-    info_and_controls_frame.pack(side=tk.RIGHT, fill=tk.X, expand=True)
-
-    date_label = tk.Label(info_and_controls_frame, text=f"Date: {datetime.now().strftime('%Y-%m-%d')}")
-    date_label.pack(side=tk.RIGHT, padx=5)
-
-    refresh_button = tk.Button(info_and_controls_frame, text="Refresh", compound=tk.RIGHT,
-                            command=lambda: refresh_portfolio_data(tree, strategy_manager))
-    refresh_button.pack(side=tk.RIGHT, padx=5)
-
-    # Pack the account info labels into the account_info_frame, aligned to the left
     tk.Label(account_info_frame, text=f"NAV: {total_equity:.2f}").pack(side=tk.LEFT)
     tk.Label(account_info_frame, text=f" Cash: {cash:.2f}").pack(side=tk.LEFT)
     tk.Label(account_info_frame, text=f" Margin: {margin:.2f}").pack(side=tk.LEFT)
+    date_label = tk.Label(account_info_frame, text=f"Date: {datetime.now().strftime('%Y-%m-%d')}")
+    date_label.pack(side=tk.RIGHT, padx=5)
 
-    portfolio_data = get_portfolio_data(strategy_manager)  # Fetch the data
-    df = pd.DataFrame(portfolio_data)
-    strategies,_ = fetch_strategies()  # Fetch list of strategies
-    strategies.append("")
-
-    # Add a scrollbar
-    scrollbar = tk.Scrollbar(window)
-    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-
-    # Create the treeview
-    columns = ("symbol", "Asset Class", "position", "FX" ,"Weight (%)",'Price','Cost','pnl %',"strategy")
-    tree = ttk.Treeview(window, columns=columns, show='headings', yscrollcommand=scrollbar.set)
-    tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-    # Define the column headings
-    for col,w in zip(columns,[50,120,60,50,60,60,60,60,100]):
-        tree.column(col, stretch=tk.YES, minwidth=0, width=w)  # Adjust the width as needed
-        tree.heading(col, text=col.capitalize())
-
-    # Adding data to the treeview
-    for item in portfolio_data:
-        row_id = tree.insert("", tk.END, values=(item["symbol"], item["asset class"], item["position"], item['currency'],f"{item['% of nav']:.2f}",
-                            f"{item['marketPrice']:.2f}", f"{item['averageCost']:.2f}", f"{item['pnl %']:.2f}",item['strategy']))
-
+    # Refresh button
+    refresh_button = tk.Button(account_info_frame, text="Refresh", command=lambda: refresh_portfolio_data(tree, strategy_manager))
+    refresh_button.pack(side=tk.RIGHT, padx=5)
     # Add a strategy dropdown for each row in a separate column
     def on_strategy_cell_click(event, strategies, df):
         region = tree.identify("region", event.x, event.y)
