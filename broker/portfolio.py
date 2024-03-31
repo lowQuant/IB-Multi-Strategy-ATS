@@ -234,6 +234,10 @@ class PortfolioManager:
     
     def get_ib_positions_for_gui(self):
         df = self.match_ib_positions_with_arcticdb()
+
+        if df.empty: # simply return df in the case
+            return df # no position are open
+        
         df = df[['symbol','asset class','position','% of nav','currency','marketPrice','averageCost','pnl %','strategy']]
         # First, convert '% of nav' to numeric for sorting
         df['% of nav'] = pd.to_numeric(df['% of nav'], errors='coerce')
@@ -334,6 +338,8 @@ class PortfolioManager:
             print(f"Error saving equity value to 'pnl' library: {e}")
 
     def save_positions(self, df_merged):
+        if df_merged.empty:
+            return
         df_merged = self.normalize_columns(df_merged)
         if 'positions' in self.portfolio_library.list_symbols():
             self.portfolio_library.append('positions', df_merged,prune_previous_versions=True,validate_index=True)

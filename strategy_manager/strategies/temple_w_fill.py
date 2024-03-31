@@ -79,12 +79,15 @@ class Strategy:
         trade.fillEvent += self.on_fill
         trade.statusEvent += self.on_status_change
 
+        self.ib.sleep(1)
+        
         while True:
             # This integrates the ib_insync event loop
             # Additional strategy logic here
             self.ib.sleep(1)
-            if trade.order:
-                self.ib.cancelOrder(trade.order)
+            if trade.order and trade.orderStatus.status != "Cancelled":
+                trade = self.ib.cancelOrder(trade.order)
+                print(trade.orderStatus.status)
                 
 
     def disconnect(self):

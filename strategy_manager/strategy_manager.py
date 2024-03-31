@@ -109,7 +109,7 @@ class StrategyManager:
         add_log(f"Order filled for {strategy_symbol}: {fill}")
 
     def handle_status_change(self, strategy_symbol, trade, status):
-        # Implement status change handling logic
+        # Implement status change handling logic        
         if "Pending" not in status: # not interested in pending order actions
             add_log(f"{status}: {trade.order.action} {trade.order.totalQuantity} {trade.contract.symbol} [{strategy_symbol}]")
 
