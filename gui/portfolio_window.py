@@ -6,7 +6,7 @@ from data_and_research import ac, fetch_strategies
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
-def on_combobox_select(tree, strategy, row_id, strategy_manager):
+def assign_strategy(tree, strategy, row_id, strategy_manager):
     '''this function is triggered via click on a strategy field
        and assigns a strategy to a position in our arcticdb''' # works
     # Get the symbol from the row
@@ -26,6 +26,10 @@ def on_combobox_select(tree, strategy, row_id, strategy_manager):
     if not filtered_df.empty:
         # Update the strategy for the filtered rows
         positions_df.loc[filter_cond, 'strategy'] = strategy
+        # Update strategy field in filtered df
+        filtered_df['strategy'] = strategy
+        filtered_df = filtered_df[-1:].reset_index(drop=True)
+        # !TODO: write a func in portfolio_manager that saves this position to arcticDB strategy portfolio lib
 
     ac.get_library('portfolio').write(f'{account_id}', positions_df, metadata={'updated': 'strategy assignment from gui'})
     print(f"Strategy '{strategy}' assigned to position with symbol '{symbol}', asset class '{asset_class}', position {position}")
@@ -157,12 +161,12 @@ def populate_portfolio_tab(window,strategy_manager,portfolio_tab,info_and_contro
                     strategy_cb.set(current_strategy)
 
                     # Bind the selection event
-                    strategy_cb.bind("<<ComboboxSelected>>", lambda e: on_combobox_select(tree, strategy_cb.get(), row_id,strategy_manager))
+                    strategy_cb.bind("<<ComboboxSelected>>", lambda e: assign_strategy(tree, strategy_cb.get(), row_id,strategy_manager))
 
         window.update_idletasks()  # Update the GUI to ensure treeview is drawn
         tree.bind("<Button-1>", lambda e: on_strategy_cell_click(e, strategies, df))
-        tree.bind("<Button-3>", lambda e: on_right_click(e, tree, df,strategy_manager))  # <Button-3> is typically the right-click button
-
+        tree.bind("<Button-2>", lambda e: on_right_click(e, tree, df,strategy_manager)) 
+        tree.bind("<Button-3>", lambda e: on_right_click(e, tree, df,strategy_manager))
         scrollbar.config(command=tree.yview)
 
     def on_right_click(event, tree, df,strategy_manager):
@@ -223,7 +227,6 @@ def open_portfolio_window(strategy_manager):
         selected_tab = event.widget.select()
         tab_text = event.widget.tab(selected_tab, "text")
         if tab_text == "Performance" and not performance_tab.populated:
-            print("Performance tab selected")
             populate_performance_tab(window, strategy_manager, performance_tab)
             performance_tab.populated = True  # Set to True after populating
 
@@ -254,7 +257,3 @@ def get_strategies(arctic_lib):
     # Fetch list of strategies from ArcticDB
     pass
 
-def assign_strategy(item_id, strategy):
-    print(f"from assign_strategy func: {item_id}")
-    # Function to assign a strategy to a portfolio item and update in ArcticDB
-    pass

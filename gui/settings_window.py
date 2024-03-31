@@ -303,35 +303,41 @@ def add_strategy_window(tab_frame,details_tab):
     # Function to save the strategy details and close the window
     def save_and_exit():
         # Saving Strategy Details
-        # Creating a dictionary of strategy details
-        details_dict = {
-            "name": name_entry.get(),
-            "filename": file_entry.get(),
-            "description": description_text.get('1.0', 'end-1c'),
-            "target_weight": weight_entry.get(),
-            'min_weight': min_weight_entry.get(),
-            'max_weight': max_weight_entry.get(),
-            'params': "",
-            'active': str(True)
-        }
+        strategy_symbol = symbol_entry.get()
+        strategies, _ = fetch_strategies()
 
-        # Convert dictionary to DataFrame
-        details_df = pd.DataFrame([details_dict], index=[symbol_entry.get()])
-        # details_df = pd.DataFrame.from_dict(details_dict, orient='index', columns=['Value'])
+        if strategy_symbol in strategies:
+            messagebox.showerror("Error", f"Strategy Symbol already exists. Choose a different.")
+        else:
+            # Creating a dictionary of strategy details
+            details_dict = {
+                "name": name_entry.get(),
+                "filename": file_entry.get(),
+                "description": description_text.get('1.0', 'end-1c'),
+                "target_weight": weight_entry.get(),
+                'min_weight': min_weight_entry.get(),
+                'max_weight': max_weight_entry.get(),
+                'params': "",
+                'active': str(True)
+            }
 
-        # Write settings to Arctic
-        try:
-            lib = ac.get_library('general', create_if_missing=True)
-            lib.append(f"strategies", details_df)#, metadata={'source': 'gui'})
-            messagebox.showinfo("Success", f"{name_entry.get()} saved successfully.")
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to save settings: {e}")
+            # Convert dictionary to DataFrame
+            details_df = pd.DataFrame([details_dict], index=[symbol_entry.get()])
+            # details_df = pd.DataFrame.from_dict(details_dict, orient='index', columns=['Value'])
 
-        # ...
-        update_overview_tab(tab_frame)  # Refresh the overview tab after saving
-        update_details_tab(details_tab)
-        new_window.destroy()
+            # Write settings to Arctic
+            try:
+                lib = ac.get_library('general', create_if_missing=True)
+                lib.append(f"strategies", details_df)#, metadata={'source': 'gui'})
+                messagebox.showinfo("Success", f"{name_entry.get()} saved successfully.")
+                
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to save settings: {e}")
+
+            # ...
+            update_overview_tab(tab_frame)  # Refresh the overview tab after saving
+            update_details_tab(details_tab)
+            new_window.destroy()
 
     # Exit Button
     Button(new_window, text="Save & Exit", command=save_and_exit).grid(row=98, column=0, padx=5, pady=5)
