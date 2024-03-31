@@ -6,14 +6,15 @@ from data_and_research import ac, fetch_strategies
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
-def on_combobox_select(tree, strategy, row_id):
+def on_combobox_select(tree, strategy, row_id, strategy_manager):
     '''this function is triggered via click on a strategy field
        and assigns a strategy to a position in our arcticdb''' # works
     # Get the symbol from the row
     symbol = tree.set(row_id, 'symbol')
     asset_class = tree.set(row_id, 'Asset Class')
     position = float(tree.set(row_id, 'position'))
-    positions_df = ac.get_library('portfolio').read('positions').data
+    account_id = strategy_manager.portfolio_manager.account_id
+    positions_df = ac.get_library('portfolio').read(f'{account_id}').data
 
    # Filter the DataFrame for the row that matches our criteria
     filter_cond = (positions_df['symbol'] == symbol) & \
@@ -26,7 +27,7 @@ def on_combobox_select(tree, strategy, row_id):
         # Update the strategy for the filtered rows
         positions_df.loc[filter_cond, 'strategy'] = strategy
 
-    ac.get_library('portfolio').write('positions', positions_df, metadata={'updated': 'strategy assignment from gui'})
+    ac.get_library('portfolio').write(f'{account_id}', positions_df, metadata={'updated': 'strategy assignment from gui'})
     print(f"Strategy '{strategy}' assigned to position with symbol '{symbol}', asset class '{asset_class}', position {position}")
 
 def refresh_portfolio_data(tree, strategy_manager):
@@ -156,7 +157,7 @@ def populate_portfolio_tab(window,strategy_manager,portfolio_tab,info_and_contro
                     strategy_cb.set(current_strategy)
 
                     # Bind the selection event
-                    strategy_cb.bind("<<ComboboxSelected>>", lambda e: on_combobox_select(tree, strategy_cb.get(), row_id))
+                    strategy_cb.bind("<<ComboboxSelected>>", lambda e: on_combobox_select(tree, strategy_cb.get(), row_id,strategy_manager))
 
         window.update_idletasks()  # Update the GUI to ensure treeview is drawn
         tree.bind("<Button-1>", lambda e: on_strategy_cell_click(e, strategies, df))

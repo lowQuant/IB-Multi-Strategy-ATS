@@ -263,13 +263,13 @@ class PortfolioManager:
         return df_ib
 
     def match_ib_positions_with_arcticdb(self):
-        if 'positions' in self.portfolio_library.list_symbols():
-            df_ac = self.portfolio_library.read('positions').data
+        if self.account_id in self.portfolio_library.list_symbols():
+            df_ac = self.portfolio_library.read(f'{self.account_id}').data
             # Filter out deleted entries before comparing
             df_ac_active = df_ac[df_ac['deleted'] != True].copy()
             latest_positions_in_ac = df_ac_active.sort_values(by='timestamp').groupby(['symbol', 'strategy', 'asset class']).last().reset_index()
         else:
-            print("Msg from function 'match_ib_positions_with_arcticdb': No Symbol 'positions' in library 'portfolio'")
+            print(f"Msg from function 'match_ib_positions_with_arcticdb': No Symbol {self.account_id} in library 'portfolio'")
             df_ib = self.get_positions_from_ib()
             self.save_positions(df_ib)
             return df_ib
@@ -341,17 +341,17 @@ class PortfolioManager:
         if df_merged.empty:
             return
         df_merged = self.normalize_columns(df_merged)
-        if 'positions' in self.portfolio_library.list_symbols():
-            self.portfolio_library.append('positions', df_merged,prune_previous_versions=True,validate_index=True)
+        if self.account_id in self.portfolio_library.list_symbols():
+            self.portfolio_library.append(f'{self.account_id}', df_merged,prune_previous_versions=True,validate_index=True)
         else:
-            print("Creating an arcticdb entry 'positions' in library 'portfolio'")
-            self.portfolio_library.write('positions',df_merged,prune_previous_versions = True,  validate_index=True)
+            print(f"Creating an arcticdb entry {self.account_id} in library 'portfolio'")
+            self.portfolio_library.write(f'{self.account_id}',df_merged,prune_previous_versions = True,  validate_index=True)
     
     def delete_symbol(self,symbol, asset_class, position, strategy):
         ''' A function that deletes an ArcticDB entry based on provided params:
             -symbol, asset_class, position & strategy'''
         
-        df = self.portfolio_library.read('positions').data
+        df = self.portfolio_library.read(f'{self.account_id}').data
 
         # Filter for matching entries that have not been previously marked as deleted
         filter_condition = (df['symbol'] == symbol) & \
@@ -366,7 +366,7 @@ class PortfolioManager:
 
         # Save the updated DataFrame back to ArcticDB
         df = self.normalize_columns(df)
-        self.portfolio_library.write('positions', df, prune_previous_versions=True)
+        self.portfolio_library.write(f'{self.account_id}', df, prune_previous_versions=True)
 
         print(f"Deleted positions for {symbol} {asset_class} with position {position}")
 
