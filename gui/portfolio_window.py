@@ -91,71 +91,78 @@ def create_info_bar(strategy_manager,tab_control):
 def populate_portfolio_tab(window,strategy_manager,portfolio_tab,info_and_controls_frame):
     portfolio_data = get_portfolio_data(strategy_manager)  # Fetch the data
     df = pd.DataFrame(portfolio_data)
-    strategies,_ = fetch_strategies()  # Fetch list of strategies
-    strategies.append("")
 
-    # Add a scrollbar
-    scrollbar = tk.Scrollbar(portfolio_tab)
-    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+    if df.empty:
+        msg_frame = tk.Frame(portfolio_tab)
+        msg_frame.pack(side='top', fill='x', expand=True)
+        no_positions_label = tk.Label(msg_frame, text="No positions in the portfolio")
+        no_positions_label.pack(side='top', pady=10)  # Adjust padding as needed
+    else:
+        strategies,_ = fetch_strategies()  # Fetch list of strategies
+        strategies.append("")
 
-    # Create the treeview
-    columns = ("symbol", "Asset Class", "position", "FX" ,"Weight (%)",'Price','Cost','pnl %',"strategy")
-    tree = ttk.Treeview(portfolio_tab, columns=columns, show='headings', yscrollcommand=scrollbar.set)
-    tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        # Add a scrollbar
+        scrollbar = tk.Scrollbar(portfolio_tab)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-    # Define the column headings
-    for col,w in zip(columns,[50,120,60,50,60,60,60,60,100]):
-        tree.column(col, stretch=tk.YES, minwidth=0, width=w)  # Adjust the width as needed
-        tree.heading(col, text=col.capitalize())
+        # Create the treeview
+        columns = ("symbol", "Asset Class", "position", "FX" ,"Weight (%)",'Price','Cost','pnl %',"strategy")
+        tree = ttk.Treeview(portfolio_tab, columns=columns, show='headings', yscrollcommand=scrollbar.set)
+        tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-    # Adding data to the treeview
-    for item in portfolio_data:
-        row_id = tree.insert("", tk.END, values=(item["symbol"], item["asset class"], item["position"], item['currency'],f"{item['% of nav']:.2f}",
-                            f"{item['marketPrice']:.2f}", f"{item['averageCost']:.2f}", f"{item['pnl %']:.2f}",item['strategy']))
+        # Define the column headings
+        for col,w in zip(columns,[50,120,60,50,60,60,60,60,100]):
+            tree.column(col, stretch=tk.YES, minwidth=0, width=w)  # Adjust the width as needed
+            tree.heading(col, text=col.capitalize())
 
-    refresh_button = tk.Button(info_and_controls_frame, text="Refresh", command=lambda: refresh_portfolio_data(tree, strategy_manager))
-    refresh_button.pack(side=tk.RIGHT, padx=5)
+        # Adding data to the treeview
+        for item in portfolio_data:
+            row_id = tree.insert("", tk.END, values=(item["symbol"], item["asset class"], item["position"], item['currency'],f"{item['% of nav']:.2f}",
+                                f"{item['marketPrice']:.2f}", f"{item['averageCost']:.2f}", f"{item['pnl %']:.2f}",item['strategy']))
 
-    # Add a strategy dropdown for each row in a separate column
-    def on_strategy_cell_click(event, strategies, df):
-        region = tree.identify("region", event.x, event.y)
-        if region == "cell":
-            column = tree.identify_column(event.x)
-            row_id = tree.identify_row(event.y)
-            if tree.heading(column, "text").lower() == "strategy":
-                # Get the symbol, asset class, and position from the treeview item
-                symbol = tree.set(row_id, 'symbol')
-                asset_class = tree.set(row_id, 'Asset Class')
-                position = float(tree.set(row_id, 'position'))
+        refresh_button = tk.Button(info_and_controls_frame, text="Refresh", command=lambda: refresh_portfolio_data(tree, strategy_manager))
+        refresh_button.pack(side=tk.RIGHT, padx=5)
 
-                # Find the corresponding dataframe row based on symbol, asset class, and position
-                df_row = df[(df['symbol'] == symbol) & 
-                            (df['asset class'] == asset_class) & 
-                            (df['position'] == position)]
-                
-                # If no matching row found in the dataframe, set current_strategy to empty
-                if df_row.empty:
-                    current_strategy = ''
-                else:
-                    current_strategy = df_row['strategy'].iloc[0]
+        # Add a strategy dropdown for each row in a separate column
+        def on_strategy_cell_click(event, strategies, df):
+            region = tree.identify("region", event.x, event.y)
+            if region == "cell":
+                column = tree.identify_column(event.x)
+                row_id = tree.identify_row(event.y)
+                if tree.heading(column, "text").lower() == "strategy":
+                    # Get the symbol, asset class, and position from the treeview item
+                    symbol = tree.set(row_id, 'symbol')
+                    asset_class = tree.set(row_id, 'Asset Class')
+                    position = float(tree.set(row_id, 'position'))
 
-                # Position the combobox
-                x, y, width, height = tree.bbox(row_id, column)
-                pady = height // 2
-                
-                # Create the Combobox widget
-                strategy_cb = ttk.Combobox(portfolio_tab, values=strategies)
-                strategy_cb.place(x=x, y=y+pady, anchor="w", width=width)
-                strategy_cb.set(current_strategy)
+                    # Find the corresponding dataframe row based on symbol, asset class, and position
+                    df_row = df[(df['symbol'] == symbol) & 
+                                (df['asset class'] == asset_class) & 
+                                (df['position'] == position)]
+                    
+                    # If no matching row found in the dataframe, set current_strategy to empty
+                    if df_row.empty:
+                        current_strategy = ''
+                    else:
+                        current_strategy = df_row['strategy'].iloc[0]
 
-                # Bind the selection event
-                strategy_cb.bind("<<ComboboxSelected>>", lambda e: on_combobox_select(tree, strategy_cb.get(), row_id))
+                    # Position the combobox
+                    x, y, width, height = tree.bbox(row_id, column)
+                    pady = height // 2
+                    
+                    # Create the Combobox widget
+                    strategy_cb = ttk.Combobox(portfolio_tab, values=strategies)
+                    strategy_cb.place(x=x, y=y+pady, anchor="w", width=width)
+                    strategy_cb.set(current_strategy)
 
-    window.update_idletasks()  # Update the GUI to ensure treeview is drawn
-    tree.bind("<Button-1>", lambda e: on_strategy_cell_click(e, strategies, df))
-    tree.bind("<Button-3>", lambda e: on_right_click(e, tree, df,strategy_manager))  # <Button-3> is typically the right-click button
+                    # Bind the selection event
+                    strategy_cb.bind("<<ComboboxSelected>>", lambda e: on_combobox_select(tree, strategy_cb.get(), row_id))
 
-    scrollbar.config(command=tree.yview)
+        window.update_idletasks()  # Update the GUI to ensure treeview is drawn
+        tree.bind("<Button-1>", lambda e: on_strategy_cell_click(e, strategies, df))
+        tree.bind("<Button-3>", lambda e: on_right_click(e, tree, df,strategy_manager))  # <Button-3> is typically the right-click button
+
+        scrollbar.config(command=tree.yview)
 
     def on_right_click(event, tree, df,strategy_manager):
         # Identify the row and column that was clicked
@@ -204,10 +211,23 @@ def open_portfolio_window(strategy_manager):
     tab_control.add(performance_tab, text='Performance')
     tab_control.pack(expand=1, fill="both")
 
-    info_and_controls_frame = create_info_bar(strategy_manager,tab_control)
+    # Track if the Performance tab has been populated
+    performance_tab.populated = False
 
-    populate_portfolio_tab(window,strategy_manager,portfolio_tab,info_and_controls_frame)
-    populate_performance_tab(window,strategy_manager,performance_tab)
+    info_and_controls_frame = create_info_bar(strategy_manager, tab_control)
+
+    populate_portfolio_tab(window, strategy_manager, portfolio_tab, info_and_controls_frame)
+
+    def on_tab_selected(event):
+        selected_tab = event.widget.select()
+        tab_text = event.widget.tab(selected_tab, "text")
+        if tab_text == "Performance" and not performance_tab.populated:
+            print("Performance tab selected")
+            populate_performance_tab(window, strategy_manager, performance_tab)
+            performance_tab.populated = True  # Set to True after populating
+
+    tab_control.bind("<<NotebookTabChanged>>", on_tab_selected)
+
 
 def delete_strategy(tree, row_id, df,strategy_manager):
     # Here you would handle the deletion of the strategy entry from the database
@@ -222,6 +242,10 @@ def delete_strategy(tree, row_id, df,strategy_manager):
 
 def get_portfolio_data(strategy_manager):
     df = strategy_manager.portfolio_manager.get_ib_positions_for_gui()
+    
+    if df.empty:
+        return df
+    
     data_list = df.to_dict('records')
     return data_list
 
