@@ -1,5 +1,5 @@
 from tkinter import Toplevel, ttk, Frame, Label, Text, Entry, Button, Checkbutton, IntVar, messagebox, Toplevel, StringVar
-import time
+from arcticdb import Arctic
 import pandas as pd
 from data_and_research import ac, fetch_strategies, fetch_strategy_params, update_params_in_db, get_strategy_allocation_bounds, update_weights
 
@@ -151,6 +151,11 @@ def save_general_settings(port, db_local, db_s3, aws_access_id, aws_access_key, 
     if db_s3 and not (aws_access_id and aws_access_key and aws_bucket_name and aws_region):
         messagebox.showerror("Error", "Please fill all AWS S3 credentials.")
         return
+    if db_s3:
+        if not test_aws_s3_connection(aws_access_id, aws_access_key, aws_bucket_name, aws_region):
+            messagebox.showerror("Error", "Test connection failed. Double check your S3 connection credentials.")
+            return  # Stop the function if S3 connection test fails
+    
     if tws_auto_start and not (username and password):
         messagebox.showerror("Error","Username and/or Password missing")
 
@@ -181,7 +186,22 @@ def save_general_settings(port, db_local, db_s3, aws_access_id, aws_access_key, 
         messagebox.showerror("Error", f"Failed to save settings: {e}")
     # Reset changes_made only if save is successful
     changes_made = False
-    # messagebox.showinfo("Success", "Settings saved successfully.")
+
+# Error Handling functions for func 'save_general_settings'
+def test_aws_s3_connection(aws_access_id, aws_access_key, bucket_name, region):
+    try:
+        test_connection =Arctic(f's3://s3.{region}.amazonaws.com:{bucket_name}?region={region}&access={aws_access_id}&secret={aws_access_key}')
+        connection_worked = None
+        try:
+            test_connection.create_library('test_connection')
+            test_connection.delete_library('test_connection')
+            connection_worked = True
+        except:
+            connection_worked = False
+        return connection_worked
+    except Exception as e:
+        messagebox.showerror("Connection Error", f"Failed to connect to AWS S3: {e}")
+        return False
 
 def exit_settings(settings_window):
     global changes_made

@@ -338,6 +338,7 @@ class PortfolioManager:
             print(f"Error saving equity value to 'pnl' library: {e}")
 
     def save_positions(self, df_merged):
+        '''Function that saves positions in ArcticDB in portfolio/"account_id".'''
         if df_merged.empty:
             return
         df_merged = self.normalize_columns(df_merged)
@@ -346,7 +347,18 @@ class PortfolioManager:
         else:
             print(f"Creating an arcticdb entry {self.account_id} in library 'portfolio'")
             self.portfolio_library.write(f'{self.account_id}',df_merged,prune_previous_versions = True,  validate_index=True)
-    
+
+    def save_existing_position_to_strategy_portfolio(self,df,strategy):
+        '''Function that saves position to portfolio/"account_id"_"strategy symbol"'''
+        if strategy:
+            df = self.normalize_columns(df)
+
+            if f"{self.account_id}_{strategy}" in self.portfolio_library.list_symbols():
+                self.portfolio_library.append(f'{self.account_id}_{strategy}', df,prune_previous_versions=True,validate_index=True)
+            else:
+                print(f"Creating an arcticdb entry {self.account_id}_{strategy} in library 'portfolio'")
+                self.portfolio_library.write(f'{self.account_id}_{strategy}',df,prune_previous_versions = True,  validate_index=True)
+
     def delete_symbol(self,symbol, asset_class, position, strategy):
         ''' A function that deletes an ArcticDB entry based on provided params:
             -symbol, asset_class, position & strategy'''

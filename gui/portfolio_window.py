@@ -30,6 +30,7 @@ def assign_strategy(tree, strategy, row_id, strategy_manager):
         filtered_df['strategy'] = strategy
         filtered_df = filtered_df[-1:].reset_index(drop=True)
         # !TODO: write a func in portfolio_manager that saves this position to arcticDB strategy portfolio lib
+        strategy_manager.portfolio_manager.save_existing_position_to_strategy_portfolio(filtered_df,strategy)
 
     ac.get_library('portfolio').write(f'{account_id}', positions_df, metadata={'updated': 'strategy assignment from gui'})
     print(f"Strategy '{strategy}' assigned to position with symbol '{symbol}', asset class '{asset_class}', position {position}")
