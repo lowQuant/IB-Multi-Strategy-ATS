@@ -180,7 +180,7 @@ def save_general_settings(port, db_local, db_s3, aws_access_id, aws_access_key, 
     try:
         lib = ac.get_library("general")
         lib.write("settings", settings_df, metadata={'source': 'gui'})
-        messagebox.showinfo("Success", "Settings saved successfully.")
+        messagebox.showinfo("Success", "Settings saved successfully. Restart Application to make changes effective.")
         changes_made = False
     except Exception as e:
         messagebox.showerror("Error", f"Failed to save settings: {e}")
