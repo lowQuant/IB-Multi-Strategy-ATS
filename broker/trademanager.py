@@ -1,13 +1,14 @@
 # ATS/broker/trademanager.py
 from ib_insync import *
 from gui.log import add_log
+import time
 
 class TradeManager:
     def __init__(self, ib_client,strategy_manager):
         self.ib = ib_client
         self.strategy_manager = strategy_manager
 
-    def trade(self, contract, quantity, order_type='MKT', urgency='Patient', orderRef="", limit=None):
+    def trade(self, contract, quantity, order_type='MKT', urgency='Patient', orderRef="", limit=None, useRth = False):
         """
         Place an Order on the exchange via ib_insync.
         :param contract: ib.Contract
@@ -38,9 +39,11 @@ class TradeManager:
             order.algoParams = [TagValue('adaptivePriority', 'Patient')]
 
         order.orderRef = orderRef
+        order.useRth = useRth
 
         # Place the order
         trade = self.ib.placeOrder(contract, order)
+        time.sleep(1)
         self.ib.sleep(1)
 
         # Notify the strategy manager about the order placement
@@ -49,8 +52,10 @@ class TradeManager:
             'strategy': orderRef,
             'trade': trade,
             'contract': contract,
-            'order': order
+            'order': order,
+            'info': 'sent from TradeManager'
         })
+        
         return trade
 
     def roll_future(self, current_contract, new_contract, orderRef=""):

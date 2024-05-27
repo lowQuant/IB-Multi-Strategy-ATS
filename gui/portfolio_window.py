@@ -179,10 +179,27 @@ def populate_portfolio_tab(window,strategy_manager,portfolio_tab,info_and_contro
             symbol = tree.set(row_id, 'symbol')
             asset_class = tree.set(row_id, 'Asset Class')
             position = float(tree.set(row_id, 'position'))
+            strategy = tree.set(row_id, 'strategy')
 
             menu = tk.Menu(window, tearoff=0)
             # Add a non-clickable menu entry as a title/header
             menu.add_command(label=f"{asset_class}: {position} {symbol}", state="disabled")
+            
+            # Get all rows with the same symbol for merge options
+            same_symbol_rows = df[df['symbol'] == symbol]
+
+            # Check if there are other rows for merging
+            if len(same_symbol_rows) > 1:
+                # Dynamically add menu entries for each row (excluding clicked one)
+                for same_symbol in same_symbol_rows.index.tolist():
+                    other_symbol = same_symbol_rows.loc[same_symbol, 'symbol']
+                    other_position = same_symbol_rows.loc[same_symbol, 'position']
+                    other_strategy = same_symbol_rows.loc[same_symbol, 'strategy']
+
+                    if  other_strategy != strategy or other_position!= position:
+                        menu.add_command(label=f"Merge with: {other_position} {other_symbol}",
+                                        command=lambda other_id=(other_symbol,other_strategy,other_position): merge_position_with(tree, row_id, other_id, df, strategy_manager))
+                        
             menu.add_command(label="Delete Entry",command=lambda: delete_strategy(tree, row_id, df,strategy_manager))
             menu.add_command(label="Refresh View",command=lambda: refresh_portfolio_data(tree, strategy_manager))
 
@@ -233,6 +250,13 @@ def open_portfolio_window(strategy_manager):
 
     tab_control.bind("<<NotebookTabChanged>>", on_tab_selected)
 
+def merge_position_with(tree, row_id_to_merge, row_id_with, df, strategy_manager):
+    # Call the strategy_manager to handle the merge logic
+    # Passing row_id_to_merge and row_id_with for identification
+    strategy_manager.portfolio_manager.merge_positions(row_id_to_merge, row_id_with, df)
+
+    # Update the treeview after successful merge (potentially in strategy_manager)
+    refresh_portfolio_data(tree, strategy_manager)
 
 def delete_strategy(tree, row_id, df,strategy_manager):
     # Here you would handle the deletion of the strategy entry from the database
@@ -252,6 +276,7 @@ def get_portfolio_data(strategy_manager):
         return df
     
     data_list = df.to_dict('records')
+    # print(data_list)
     return data_list
 
 def get_strategies(arctic_lib):

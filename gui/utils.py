@@ -1,7 +1,7 @@
 
 # gui/utils.py
 import threading, webbrowser, subprocess, requests
-import os, time
+import os, time, asyncio
 import importlib.util
 from broker import connect_to_IB, disconnect_from_IB
 from strategy_manager import StrategyManager
@@ -46,11 +46,14 @@ def open_portfolio():
 
 
 def exit_application(window):
-    print("Terminating Jupyter Process")
-    terminate_jupyter_server()
+    """ Exit the application gracefully. """
+    global strategy_manager
+    if strategy_manager:
+        strategy_manager.disconnect()
+    window.quit()
+    window.destroy()
+    print("Application closed.")
 
-    print("Exiting Application")
-    window.quit()  # This will quit the Tkinter mainloop
 
 def launch_jupyter(event=None):
     # Start Jupyter in a new thread
@@ -77,7 +80,7 @@ def is_jupyter_running():
 
 def terminate_jupyter_server():
     global jupyter_subprocess
-    print(jupyter_subprocess)
+    # print(jupyter_subprocess)
     if jupyter_subprocess:
         # Politely ask the subprocess to terminate
         jupyter_subprocess.terminate()

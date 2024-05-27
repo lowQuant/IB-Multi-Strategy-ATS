@@ -1,5 +1,5 @@
 from ib_insync import *
-import asyncio
+import asyncio, time
 from broker.trademanager import TradeManager
 from broker import connect_to_IB, disconnect_from_IB
 from data_and_research import get_strategy_allocation_bounds, get_strategy_symbol
@@ -17,6 +17,7 @@ def manage_strategy(client_id, strategy_manager):
         # Instantiate the Strategy class
         global strategy
         strategy = Strategy(client_id, strategy_manager)
+        add_log(f"Thread Started [{strategy.strategy_symbol}]")
         strategy.run()
 
     except Exception as e:
@@ -66,28 +67,50 @@ class Strategy:
             'type': 'status_change',
             'strategy': self.strategy_symbol,
             'trade': trade,
-            'status': trade.orderStatus.status
+            'status': trade.orderStatus.status,
+            'info': f'Status Change message sent from {self.strategy_symbol}'
         })
 
     def run(self):
-        add_log(f"Thread Started [{self.strategy_symbol}]")
         # Add Trading logic
-        contract = Stock('AAPL', 'SMART', 'USD')
-        trade = self.trade_manager.trade(contract,1,order_type='LMT',orderRef=self.strategy_symbol, limit=0.99)
 
-        # Assign callbacks for order updates
+        contract = Stock('AAPL', 'SMART', 'USD')
+        #trade = self.trade_manager.trade(contract,1,order_type='LMT',limit=1,orderRef=self.strategy_symbol,urgency='Urgent',useRth=True)
+        trade = self.trade_manager.trade(contract,1,order_type='MKT',orderRef=self.strategy_symbol,urgency='Urgent',useRth=True)
+
         trade.fillEvent += self.on_fill
         trade.statusEvent += self.on_status_change
+        # contract = Stock('CID','SMART','USD')
+        # trade = self.trade_manager.trade(contract,-400,order_type='MKT',orderRef=self.strategy_symbol,urgency='Urgent',useRth=True)
+        # self.ib.sleep(1)
+        # Assign callbacks for order updates
 
-        self.ib.sleep(1)
+
         
-        while True:
-            # This integrates the ib_insync event loop
-            # Additional strategy logic here
-            self.ib.sleep(1)
-            if trade.order and trade.orderStatus.status != "Cancelled":
-                trade = self.ib.cancelOrder(trade.order)
-                print(trade.orderStatus.status)
+        self.ib.sleep(5)
+        time.sleep(3)
+        # while True:
+        #     # This integrates the ib_insync event loop
+        #     if trade.orderStatus.status == "Cancelled":
+        #     #     print(trade)
+        #         break
+        #     # Additional strategy logic here
+        #     self.ib.sleep(1)
+        #     if trade.order and trade.orderStatus.status != "Cancelled":
+        #         trade = self.ib.cancelOrder(trade.order)
+                
+                # print(trade.orderStatus.status)
+
+            # if trade.isActive():
+            #     print("is active")
+            # if trade.isDone():
+            #     print("done!")
+            #     print(trade)
+            
+            #     self.ib.sleep(2)
+            #     time.sleep(5)
+            
+
                 
 
     def disconnect(self):

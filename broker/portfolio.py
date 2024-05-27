@@ -1,6 +1,7 @@
 # ATS/broker/portfolio.py
 
 import pandas as pd
+import math
 from ib_insync import *
 from gui.log import add_log
 import datetime
@@ -49,16 +50,18 @@ class PortfolioManager:
                 self.ib.qualifyContracts(fx_pair)
                 price = self.ib.reqMktData(fx_pair, '', False, False)
                 self.ib.sleep(0.2)  # Wait for data
-                if type(price.marketPrice()) == int:
+                if type(price.marketPrice()) == float and not math.isnan(price.marketPrice()):
                     self.fx_cache[(currency, base_currency)] = price.marketPrice()
+                    print(f"1. {price.marketPrice()},{type(price.marketPrice())}")
                 else:
-                    if type(price.close) == int:
-                        self.fx_cache[(currency, base_currency)] = price.close
-                    else:
-                        print("Using YF to get fx quote. Check IB connection for market data subscription. ")
-                        ticker = f"{base_currency}{currency}=X"
-                        rate = yf.Ticker(ticker).info['ask']
-                        self.fx_cache[(currency, base_currency)] = rate
+                    if type(price.close) == float:
+                        if not math.isnan(price.close):
+                            self.fx_cache[(currency, base_currency)] = price.close
+                        else:
+                            print("Using YF to get fx quote. Check IB connection for market data subscription. ")
+                            ticker = f"{base_currency}{currency}=X"
+                            rate = yf.Ticker(ticker).info['ask']
+                            self.fx_cache[(currency, base_currency)] = rate
 
         return self.fx_cache[(currency, base_currency)]
 
@@ -82,11 +85,13 @@ class PortfolioManager:
             return base_value
     
     def update_data(self,output_df,row):
+        # print(row)
         self.total_equity =  sum(float(entry.value) for entry in self.ib.accountSummary() if entry.tag == "EquityWithLoanValue")
         output_df = output_df.copy()
         output_df['timestamp'] = row['timestamp']
         output_df['marketPrice'] = row['marketPrice']
         output_df['marketValue_base'] = output_df['marketValue'] / row['fx_rate']
+        # print(output_df)
         output_df['pnl %'] = self.calculate_pnl(row.marketPrice,output_df.averageCost.item(),output_df.position.item(),row.contract)
 
         output_df['unrealizedPNL'] = output_df['marketPrice'] - output_df['averageCost']
@@ -155,7 +160,7 @@ class PortfolioManager:
             'pnl %': pnl_percent,
             'strategy': '',  # This can be updated to assign a strategy later
             'contract': row['contract'],
-            'trade': None,
+            'trade': '',
             'open_dt': datetime.date.today().isoformat(),
             'close_dt': '',
             'deleted': False,
@@ -163,7 +168,7 @@ class PortfolioManager:
             'marketValue': residual_market_value,
             'unrealizedPNL': (market_price - residual_avg_cost) * residual_position,
             'currency': row.currency,
-            'realizedPNL': 0,  # Assuming no realized P&L for the residual; update as needed
+            'realizedPNL': 0.0,  # Assuming no realized P&L for the residual; update as needed
             'account': row['account'],
             'marketValue_base': residual_market_value / row.fx_rate,
             'fx_rate': row.fx_rate}
@@ -216,8 +221,8 @@ class PortfolioManager:
                             'currency':item.contract.currency,
                             'realizedPNL': item.realizedPNL,
                             'account': item.account,
-                            'marketValue_base': None,
-                            'fx_rate': None}
+                            'marketValue_base': 0.0,
+                            'fx_rate': self.get_fx_rate(item.contract.currency, self.base)}
             
             portfolio_data.append(position_dict)
                 
@@ -257,17 +262,56 @@ class PortfolioManager:
 
         return df_final_sorted
 
-    def create_positions_table(self):
-        df_ib = self.get_positions_from_ib()
-        self.save_positions(df_ib)
-        return df_ib
+    def save_new_trade_in_global_portfolio_ac(self, strategy_symbol,trade):
+        '''Function called from Strategy Manager.handle_fill_event()
+           that saves the position update in the global account arcticDB'''
+        print("in save_new_trade_in_global_portfolio_ac function")
+
+        try:
+            trade_dict = {'timestamp': datetime.datetime.now().strftime('%Y-%m-%d %H:%M'),
+            'symbol': trade.contract.symbol,
+            'asset class': trade.contract.secType,
+            'position': trade.order.totalQuantity,
+            '% of nav': 0.0, # to be calculated
+            'averageCost': trade.orderStatus.avgFillPrice,
+            'marketPrice': trade.orderStatus.lastFillPrice,
+            'pnl %': 0.0, # to be calculated
+            'strategy': strategy_symbol,
+            'contract': str(trade.contract),
+            'trade': str(trade),
+            'open_dt':datetime.date.today().isoformat(),
+            'close_dt': '',
+            'deleted': False,
+            'delete_dt': '',
+            'marketValue': 0.0, # to be calculated
+            'unrealizedPNL': 0.0, # to be calculated
+            'currency':trade.contract.currency,
+            'realizedPNL': 0.0, # to be calculated
+            'account': trade.fills[0].execution.acctNumber,
+            'marketValue_base': 0.0, # to be calculated
+            'fx_rate': 0.0}
+        except Exception as e:
+            print(f"Error processing trade: {e}")
+
+        print(trade_dict)
+        df = pd.DataFrame([trade_dict])
+        print("saving new trade in DB")
+        print(df)
+        self.save_positions(df)
+
+    # def create_positions_table(self):
+    #     df_ib = self.get_positions_from_ib()
+    #     self.save_positions(df_ib)
+    #     return df_ib
 
     def match_ib_positions_with_arcticdb(self):
+        # print("print from match_ib_positions_with_arcticdb")
         if self.account_id in self.portfolio_library.list_symbols():
             df_ac = self.portfolio_library.read(f'{self.account_id}').data
             # Filter out deleted entries before comparing
             df_ac_active = df_ac[df_ac['deleted'] != True].copy()
             latest_positions_in_ac = df_ac_active.sort_values(by='timestamp').groupby(['symbol', 'strategy', 'asset class']).last().reset_index()
+            print(latest_positions_in_ac['position'])
         else:
             print(f"Msg from function 'match_ib_positions_with_arcticdb': No Symbol {self.account_id} in library 'portfolio'")
             df_ib = self.get_positions_from_ib()
@@ -275,6 +319,7 @@ class PortfolioManager:
             return df_ib
 
         df_ib = self.get_positions_from_ib()
+        print(df_ib.head(3))
         df_merged = pd.DataFrame()
 
         # Iterate through the positions obtained from Interactive Brokers
@@ -286,7 +331,7 @@ class PortfolioManager:
             # Filter the ArcticDB DataFrame for entries with the same symbol and asset class
             strategy_entries_in_ac = latest_positions_in_ac[(latest_positions_in_ac['symbol'] == symbol) & (latest_positions_in_ac['asset class'] == asset_class)]
             sum_of_position_entries = strategy_entries_in_ac['position'].sum()
-
+            print(strategy_entries_in_ac)
             if strategy_entries_in_ac.empty: # no database entry, add position
                 df_merged = pd.concat([df_merged, pd.DataFrame([row])], ignore_index=True)
 
