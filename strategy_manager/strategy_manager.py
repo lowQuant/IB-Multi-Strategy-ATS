@@ -22,7 +22,7 @@ class StrategyManager:
         
         self.message_queue = queue.Queue()
 
-        # Start the message processing thread
+        # Start the message processing thread with a flag indicating loop creation
         self.create_loop_in_thread = True
         self.message_processor_thread = threading.Thread(target=self.process_messages)
         self.message_processor_thread.daemon = True
@@ -34,7 +34,6 @@ class StrategyManager:
             self.loop = asyncio.new_event_loop()  # Create a new event loop
             asyncio.set_event_loop(self.loop)  # Set the loop for the current thread
             self.create_loop_in_thread = False  # Only create the loop once
-        
         try:
             while True:
                 message = self.message_queue.get(block=True)  # Wait for a message
@@ -42,20 +41,52 @@ class StrategyManager:
         except Exception as e:
             print(f"Error processing message: {e}")
         finally:
-            if hasattr(self, 'loop'):
+            # Close the event loop when exiting the thread
+            if hasattr(self, 'loop'):  # Check if loop exists before closing
                 self.loop.close()
-    
+
     def handle_message(self, message):
         # Implement your logic to handle different message types
         print(f"Received message: {message['info']}")  # Example message handling
         if message['type'] == 'order':
             self.notify_order_placement(message['strategy'], message['trade'])
         elif message['type'] == 'fill':
-            self.handle_fill_event(message['strategy'], message['trade'], message['fill'])
+            self.handle_fill_event(message['strategy'],message['trade'],message['fill'])
         elif message['type'] == 'status_change':
-            # Synchronous handling can remain as is
             self.handle_status_change(message['strategy'], message['trade'], message['status'])
         self.message_queue.task_done()
+
+    def notify_order_placement(self, strategy, trade):
+        symbol = trade.contract.symbol if hasattr(trade.contract, 'symbol') else "N/A"
+        order_type = trade.order.orderType
+        action = trade.order.action
+        quantity = trade.order.totalQuantity
+
+        add_log(f"{order_type} Order placed: {action} {quantity} {symbol} [{strategy}]")
+
+    def handle_fill_event(self, strategy_symbol, trade, fill):
+        add_log(f"{trade.fills[0].execution.side} {trade.orderStatus.filled} {trade.contract.symbol}@{trade.orderStatus.avgFillPrice} [{strategy_symbol}]")
+        
+        # # Save and mark trade in the global portfolio
+        # self.portfolio_manager.save_new_trade_in_global_portfolio_ac(strategy_symbol, trade)
+        # current_portfolio_df = self.portfolio_manager.match_ib_positions_with_arcticdb()
+
+    def handle_status_change(self, strategy_symbol, trade, status):
+        if "Pending" not in status:
+            add_log(f"{status}: {trade.order.action} {trade.order.totalQuantity} {trade.contract.symbol} [{strategy_symbol}]")
+
+    def disconnect(self):
+        self.stop_all()
+
+    def stop_all(self):
+        """ Stop all running strategies and threads. """
+        for thread in self.strategy_threads:
+            thread.join(timeout=5)
+        # Wait for the message processing thread to finish
+        self.message_processor_thread.join(timeout=5)
+
+        self.strategy_threads = []
+        self.strategies = []
 
     def load_strategies(self):
         '''loads all active strategies that the user added via the Settings/Strategies Menu
@@ -102,94 +133,15 @@ class StrategyManager:
     def disconnect(self):
         self.stop_all()
 
+    def stop_message_queue(self):
+        """Stop the message processing loop and close the event loop."""
+        self.running = False
+        self.loop.call_soon_threadsafe(self.loop.stop)
+
     def stop_all(self):
         """ Stop all running strategies and threads. """
         for thread in self.strategy_threads:
             thread.join(timeout=5)
-        self.message_processor_thread.join(timeout=5)
+        self.stop_message_queue()
         self.strategy_threads = []
         self.strategies = []
-
-    def notify_order_placement(self, strategy, trade):
-        symbol = trade.contract.symbol if hasattr(trade.contract, 'symbol') else "N/A"
-        order_type = trade.order.orderType
-        action = trade.order.action
-        quantity = trade.order.totalQuantity
-
-        add_log(f"{order_type} Order placed: {action} {quantity} {symbol} [{strategy}]")
-
-    def handle_status_change(self, strategy_symbol, trade, status):
-        # Implement status change handling logic        
-        if "Pending" not in status: # not interested in pending order actions
-            add_log(f"{status}: {trade.order.action} {trade.order.totalQuantity} {trade.contract.symbol} [{strategy_symbol}]")
-
-    def handle_fill_event(self):
-        pass
-    
-    # def notify_order_placement(self, strategy, trade):
-    #     # Extracting order details for logging
-    #     symbol = trade.contract.symbol if hasattr(trade.contract, 'symbol') else "N/A"
-    #     order_type = trade.order.orderType
-    #     action = trade.order.action
-    #     quantity = trade.order.totalQuantity
-
-    #     add_log(f"{order_type} Order placed: {action} {quantity} {symbol} [{strategy}]")
-
-    #     # if trade.filled():
-    #     #     print("Fill received immediately")
-    #     #     self.message_queue.put({'type': 'fill','strategy': strategy,
-    #     #                             'trade': trade,'fill': trade.fills})
-
-
-
-    # async def handle_fill_event(self, strategy_symbol, trade, fill):
-    #     # Asynchronous version of the function
-    #     add_log(f"Fill received: {fill} [{strategy_symbol}]")
-    #     print(fill)
-    #     # Example async call within the handler, assume save_new_trade_in_global_portfolio_ac is async
-    #     current_portfolio_df = await self.portfolio_manager.match_ib_positions_with_arcticdb()
-    #     print("current portfolio")
-    #     print(current_portfolio_df)
-    #     if trade.isDone():
-    #         add_log(f"Order filled for {strategy_symbol}: {fill}")
-
-    # def handle_fill_event(self, strategy_symbol, trade, fill):
-    #     '''Function that implements fill event handling logic'''
-    #     add_log(f"Fill received: {fill} [{strategy_symbol}]")
-    #     # Save and mark trade in the global portfolio
-    #     self.portfolio_manager.save_new_trade_in_global_portfolio_ac(strategy_symbol,trade)
-    #     current_portfolio_df = self.portfolio_manager.match_ib_positions_with_arcticdb()
-        
-    #     # Logging in the GUI
-    #     if trade.isDone():
-    #         add_log(f"Order filled for {strategy_symbol}: {fill}")
-
-
-    # def handle_status_change(self, strategy_symbol, trade, status):
-    #     # Implement status change handling logic        
-    #     if "Pending" not in status: # not interested in pending order actions
-    #         add_log(f"{status}: {trade.order.action} {trade.order.totalQuantity} {trade.contract.symbol} [{strategy_symbol}]")
-
-    #     total_equity = sum(float(entry.value) for entry in self.ib_client.accountSummary() if entry.tag == "EquityWithLoanValue")
-    #     print(total_equity)
-    #     #!TODO: if "Cancel" in status: make sure order is marked as cancelled in ArcticDB
-    #     # DO WE NEED ORDER TRACKING IN ARCTICDB? We are using orderref anyways??!
-            
-
-    def update_on_trade(self, strategy, trade_details):
-        strategy_name = type(strategy).__name__
-        # Calculate new cash position
-        new_cash_position = self.calculate_cash_position(strategy_name, trade_details)
-        
-        # Update database
-        self.update_database(strategy_name, trade_details, new_cash_position)
-
-    def calculate_cash_position(self, strategy_name, trade_details):
-        # Implement cash position calculation logic
-        new_cash_position = 0
-        return new_cash_position
-
-    def update_database(self, strategy_name, trade_details, new_cash_position):
-        # Implement database update logic
-        # Use ArcticDB to update the "portfolio" library with the new trade and cash position
-        pass

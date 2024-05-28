@@ -16,7 +16,8 @@ class PortfolioManager:
         # self.library = initialize_db('db').get_library('portfolio', create_if_missing=True) # ac.get_library('portfolio', create_if_missing=True)
         self.portfolio_library = ac.get_library('portfolio', create_if_missing=True)
         self.pnl_library = ac.get_library('pnl', create_if_missing=True)
-        self.account_id = self.ib.managedAccounts()[0]
+        # self.account_id = self.ib.managedAccounts()[0]
+        self.account_id = "test"
         self.total_equity =  sum(float(entry.value) for entry in self.ib.accountSummary() if entry.tag == "EquityWithLoanValue")
 
     def convert_marketValue_to_base(self,df):
@@ -52,7 +53,6 @@ class PortfolioManager:
                 self.ib.sleep(0.2)  # Wait for data
                 if type(price.marketPrice()) == float and not math.isnan(price.marketPrice()):
                     self.fx_cache[(currency, base_currency)] = price.marketPrice()
-                    print(f"1. {price.marketPrice()},{type(price.marketPrice())}")
                 else:
                     if type(price.close) == float:
                         if not math.isnan(price.close):
@@ -85,15 +85,14 @@ class PortfolioManager:
             return base_value
     
     def update_data(self,output_df,row):
-        # print(row)
+        '''Function to update dataframe with current market data'''
+
         self.total_equity =  sum(float(entry.value) for entry in self.ib.accountSummary() if entry.tag == "EquityWithLoanValue")
         output_df = output_df.copy()
         output_df['timestamp'] = row['timestamp']
         output_df['marketPrice'] = row['marketPrice']
         output_df['marketValue_base'] = output_df['marketValue'] / row['fx_rate']
-        # print(output_df)
         output_df['pnl %'] = self.calculate_pnl(row.marketPrice,output_df.averageCost.item(),output_df.position.item(),row.contract)
-
         output_df['unrealizedPNL'] = output_df['marketPrice'] - output_df['averageCost']
         output_df['marketValue'] = (output_df['marketPrice'] * output_df['position']) 
         output_df['% of nav'] = (output_df['marketValue_base'] / self.total_equity) * 100

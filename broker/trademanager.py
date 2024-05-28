@@ -8,7 +8,7 @@ class TradeManager:
         self.ib = ib_client
         self.strategy_manager = strategy_manager
 
-    def trade(self, contract, quantity, order_type='MKT', urgency='Patient', orderRef="", limit=None, useRth = False):
+    def trade(self, contract, quantity, order_type='MKT', algo = True, urgency='Patient', orderRef="", limit=None, useRth = False):
         """
         Place an Order on the exchange via ib_insync.
         :param contract: ib.Contract
@@ -30,13 +30,14 @@ class TradeManager:
         elif order_type == 'MKT':
             order = MarketOrder(action, totalQuantity)
 
-        order.algoStrategy = 'Adaptive'
-        if urgency == 'Normal':
-            order.algoParams = [TagValue('adaptivePriority', 'Normal')]
-        elif urgency == 'Urgent':
-            order.algoParams = [TagValue('adaptivePriority', 'Urgent')]
-        else:
-            order.algoParams = [TagValue('adaptivePriority', 'Patient')]
+        if algo:
+            order.algoStrategy = 'Adaptive'
+            if urgency == 'Normal':
+                order.algoParams = [TagValue('adaptivePriority', 'Normal')]
+            elif urgency == 'Urgent':
+                order.algoParams = [TagValue('adaptivePriority', 'Urgent')]
+            else:
+                order.algoParams = [TagValue('adaptivePriority', 'Patient')]
 
         order.orderRef = orderRef
         order.useRth = useRth

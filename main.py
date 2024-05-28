@@ -1,4 +1,6 @@
 # ATS/main.py
+import asyncio
+
 from gui import run_gui
 from broker import connect_to_IB, disconnect_from_IB
 from data_and_research import ac
