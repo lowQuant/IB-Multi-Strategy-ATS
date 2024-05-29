@@ -9,13 +9,17 @@ import yfinance as yf
 from data_and_research import ac, initialize_db
 
 class PortfolioManager:
-    def __init__(self, ib_client: IB):
+    def __init__(self, ib_client: IB,arctic = None):
         self.ib = ib_client
         self.fx_cache = {}
         self.base = [entry.currency for entry in self.ib.accountSummary() if entry.tag == "EquityWithLoanValue"][0]
         # self.library = initialize_db('db').get_library('portfolio', create_if_missing=True) # ac.get_library('portfolio', create_if_missing=True)
-        self.portfolio_library = ac.get_library('portfolio', create_if_missing=True)
-        self.pnl_library = ac.get_library('pnl', create_if_missing=True)
+        if arctic:
+            self.portfolio_library = arctic.get_library('portfolio', create_if_missing=True)
+            self.pnl_library = arctic.get_library('pnl', create_if_missing=True)
+        else:
+            self.portfolio_library = ac.get_library('portfolio', create_if_missing=True)
+            self.pnl_library = ac.get_library('pnl', create_if_missing=True)
         # self.account_id = self.ib.managedAccounts()[0]
         self.account_id = "test"
         self.total_equity =  sum(float(entry.value) for entry in self.ib.accountSummary() if entry.tag == "EquityWithLoanValue")
@@ -210,7 +214,7 @@ class PortfolioManager:
                             'pnl %': pnl * 100,
                             'strategy': '',
                             'contract': item.contract,
-                            'trade': None,
+                            'trade': '',
                             'open_dt':datetime.date.today().isoformat(),
                             'close_dt': '',
                             'deleted': False,
@@ -264,7 +268,7 @@ class PortfolioManager:
     def save_new_trade_in_global_portfolio_ac(self, strategy_symbol,trade):
         '''Function called from Strategy Manager.handle_fill_event()
            that saves the position update in the global account arcticDB'''
-        print("in save_new_trade_in_global_portfolio_ac function")
+        #print("in save_new_trade_in_global_portfolio_ac function")
 
         try:
             trade_dict = {'timestamp': datetime.datetime.now().strftime('%Y-%m-%d %H:%M'),
@@ -292,16 +296,11 @@ class PortfolioManager:
         except Exception as e:
             print(f"Error processing trade: {e}")
 
-        print(trade_dict)
+        # print(trade_dict)
         df = pd.DataFrame([trade_dict])
         print("saving new trade in DB")
         print(df)
         self.save_positions(df)
-
-    # def create_positions_table(self):
-    #     df_ib = self.get_positions_from_ib()
-    #     self.save_positions(df_ib)
-    #     return df_ib
 
     def match_ib_positions_with_arcticdb(self):
         # print("print from match_ib_positions_with_arcticdb")
@@ -350,9 +349,11 @@ class PortfolioManager:
 
             elif len(strategy_entries_in_ac) > 1:
                 if total_position == sum_of_position_entries:
+                    print("len(strategy_entries_in_ac) > 1 and total_position == sum_of_position_entries")
                     strategy_entries_in_ac = self.update_data(strategy_entries_in_ac,row)
                     df_merged = pd.concat([df_merged, strategy_entries_in_ac], ignore_index=True)
                 else:
+                    print("len(strategy_entries_in_ac) > 1 and total_position != sum_of_position_entries")
                     #update marketdata relevant fields for the existing db entry
                     strategy_entries_in_ac = self.update_data(strategy_entries_in_ac,row)
                     df_merged = pd.concat([df_merged, strategy_entries_in_ac], ignore_index=True)

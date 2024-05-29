@@ -197,8 +197,9 @@ def populate_portfolio_tab(window,strategy_manager,portfolio_tab,info_and_contro
                     other_strategy = same_symbol_rows.loc[same_symbol, 'strategy']
 
                     if  other_strategy != strategy or other_position!= position:
+                        position_to_merge = (symbol, strategy, position)
                         menu.add_command(label=f"Merge with: {other_position} {other_symbol}",
-                                        command=lambda other_id=(other_symbol,other_strategy,other_position): merge_position_with(tree, row_id, other_id, df, strategy_manager))
+                                        command=lambda target_position=(other_symbol,other_strategy,other_position): merge_position_with(tree, position_to_merge, target_position, df, strategy_manager))
                         
             menu.add_command(label="Delete Entry",command=lambda: delete_strategy(tree, row_id, df,strategy_manager))
             menu.add_command(label="Refresh View",command=lambda: refresh_portfolio_data(tree, strategy_manager))
@@ -250,10 +251,11 @@ def open_portfolio_window(strategy_manager):
 
     tab_control.bind("<<NotebookTabChanged>>", on_tab_selected)
 
-def merge_position_with(tree, row_id_to_merge, row_id_with, df, strategy_manager):
+def merge_position_with(tree, position_to_merge, target_position, df, strategy_manager):
     # Call the strategy_manager to handle the merge logic
-    # Passing row_id_to_merge and row_id_with for identification
-    strategy_manager.portfolio_manager.merge_positions(row_id_to_merge, row_id_with, df)
+
+
+   # strategy_manager.portfolio_manager.merge_positions(tree, row_to_merge, target_row, df)
 
     # Update the treeview after successful merge (potentially in strategy_manager)
     refresh_portfolio_data(tree, strategy_manager)
