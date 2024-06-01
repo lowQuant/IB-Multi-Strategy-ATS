@@ -192,14 +192,15 @@ def populate_portfolio_tab(window,strategy_manager,portfolio_tab,info_and_contro
             if len(same_symbol_rows) > 1:
                 # Dynamically add menu entries for each row (excluding clicked one)
                 for same_symbol in same_symbol_rows.index.tolist():
-                    other_symbol = same_symbol_rows.loc[same_symbol, 'symbol']
-                    other_position = same_symbol_rows.loc[same_symbol, 'position']
-                    other_strategy = same_symbol_rows.loc[same_symbol, 'strategy']
+                    target_symbol = same_symbol_rows.loc[same_symbol, 'symbol']
+                    target_asset_class = same_symbol.loc[same_symbol,'Asset Class']
+                    target_position = same_symbol_rows.loc[same_symbol, 'position']
+                    target_strategy = same_symbol_rows.loc[same_symbol, 'strategy']
 
-                    if  other_strategy != strategy or other_position!= position:
-                        position_to_merge = (symbol, strategy, position)
-                        menu.add_command(label=f"Merge with: {other_position} {other_symbol}",
-                                        command=lambda target_position=(other_symbol,other_strategy,other_position): merge_position_with(tree, position_to_merge, target_position, df, strategy_manager))
+                    if  target_strategy != strategy or target_position!= position and asset_class == target_asset_class:
+                        merging_row = (symbol, asset_class, strategy, position)
+                        menu.add_command(label=f"Merge with: {target_position} {target_symbol}",
+                                        command=lambda target_row=(target_symbol,target_asset_class,target_strategy,target_position): merge_position_with(tree, merging_row, target_row, df, strategy_manager))
                         
             menu.add_command(label="Delete Entry",command=lambda: delete_strategy(tree, row_id, df,strategy_manager))
             menu.add_command(label="Refresh View",command=lambda: refresh_portfolio_data(tree, strategy_manager))
@@ -251,10 +252,35 @@ def open_portfolio_window(strategy_manager):
 
     tab_control.bind("<<NotebookTabChanged>>", on_tab_selected)
 
-def merge_position_with(tree, position_to_merge, target_position, df, strategy_manager):
+def merge_position_with(tree, merging_row, target_row, df, strategy_manager):
     # Call the strategy_manager to handle the merge logic
+    merging_symbol , merging_asset_class, merging_strategy, merging_position = merging_row
+    target_symbol,target_asset_class,target_strategy,target_position = target_row 
 
+    account_id = strategy_manager.portfolio_manager.account_id
+    df_ac = ac.get_library('portfolio').read(f'{account_id}').data
 
+    df_ac_active = df_ac[df_ac['deleted'] != True].copy()
+    latest_active_entries = df_ac_active.sort_values(by='timestamp').groupby(['symbol', 'strategy', 'asset class','position']).last().reset_index()
+
+    merging_row = latest_active_entries[
+                  (latest_active_entries['symbol'] == merging_row[0]) 
+                & (latest_active_entries['asset_class'] == merging_row[1]) 
+                & (latest_active_entries['strategy'] == merging_row[2])
+                & (latest_active_entries['position'] == merging_row[3])
+                ].reset_index(drop=True)
+    
+    target_row = latest_active_entries[
+                  (latest_active_entries['symbol'] == target_row[0])
+                & (latest_active_entries['asset_class'] == target_row[1]) 
+                & (latest_active_entries['strategy'] == target_row[2]) 
+                & (latest_active_entries['position'] == target_row[3])
+                ].reset_index(drop=True)
+
+    if merging_position + target_position == 0:
+        strategy_manager.portfolio_manager.close_position()
+    else:
+        strategy_manager.portfolio_manager.aggregate_position()
    # strategy_manager.portfolio_manager.merge_positions(tree, row_to_merge, target_row, df)
 
     # Update the treeview after successful merge (potentially in strategy_manager)
