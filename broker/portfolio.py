@@ -64,7 +64,10 @@ class PortfolioManager:
                         else:
                             print("Using YF to get fx quote. Check IB connection for market data subscription. ")
                             ticker = f"{base_currency}{currency}=X"
-                            rate = yf.Ticker(ticker).info['ask']
+                            try:
+                                rate = yf.Ticker(ticker).info['ask']
+                            except:
+                                rate = 1.0
                             self.fx_cache[(currency, base_currency)] = rate
 
         return self.fx_cache[(currency, base_currency)]
