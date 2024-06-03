@@ -193,7 +193,7 @@ def populate_portfolio_tab(window,strategy_manager,portfolio_tab,info_and_contro
                 # Dynamically add menu entries for each row (excluding clicked one)
                 for same_symbol in same_symbol_rows.index.tolist():
                     target_symbol = same_symbol_rows.loc[same_symbol, 'symbol']
-                    target_asset_class = same_symbol.loc[same_symbol,'Asset Class']
+                    target_asset_class = same_symbol_rows.loc[same_symbol,'asset class']
                     target_position = same_symbol_rows.loc[same_symbol, 'position']
                     target_strategy = same_symbol_rows.loc[same_symbol, 'strategy']
 
@@ -262,17 +262,18 @@ def merge_position_with(tree, merging_row, target_row, df, strategy_manager):
 
     df_ac_active = df_ac[df_ac['deleted'] != True].copy()
     latest_active_entries = df_ac_active.sort_values(by='timestamp').groupby(['symbol', 'strategy', 'asset class','position']).last().reset_index()
+    print(latest_active_entries)
 
     merging_row = latest_active_entries[
                   (latest_active_entries['symbol'] == merging_row[0]) 
-                & (latest_active_entries['asset_class'] == merging_row[1]) 
+                & (latest_active_entries['asset class'] == merging_row[1]) 
                 & (latest_active_entries['strategy'] == merging_row[2])
                 & (latest_active_entries['position'] == merging_row[3])
                 ].reset_index(drop=True)
     
     target_row = latest_active_entries[
                   (latest_active_entries['symbol'] == target_row[0])
-                & (latest_active_entries['asset_class'] == target_row[1]) 
+                & (latest_active_entries['asset class'] == target_row[1]) 
                 & (latest_active_entries['strategy'] == target_row[2]) 
                 & (latest_active_entries['position'] == target_row[3])
                 ].reset_index(drop=True)
