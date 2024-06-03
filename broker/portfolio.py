@@ -21,7 +21,7 @@ class PortfolioManager:
             self.portfolio_library = ac.get_library('portfolio', create_if_missing=True)
             self.pnl_library = ac.get_library('pnl', create_if_missing=True)
         # self.account_id = self.ib.managedAccounts()[0]
-        self.account_id = "test"
+        self.account_id = "test2"
         self.total_equity =  sum(float(entry.value) for entry in self.ib.accountSummary() if entry.tag == "EquityWithLoanValue")
 
     def convert_marketValue_to_base(self,df):
@@ -164,6 +164,7 @@ class PortfolioManager:
             'strategy': '',  # This can be updated to assign a strategy later
             'contract': row['contract'],
             'trade': '',
+            'trade_context': '',
             'open_dt': datetime.date.today().isoformat(),
             'close_dt': '',
             'deleted': False,
@@ -215,6 +216,7 @@ class PortfolioManager:
                             'strategy': '',
                             'contract': item.contract,
                             'trade': '',
+                            'trade_context': '',
                             'open_dt':datetime.date.today().isoformat(),
                             'close_dt': '',
                             'deleted': False,
@@ -372,6 +374,11 @@ class PortfolioManager:
         else:
             df_ac_active = pd.DataFrame()
 
+        # Check for duplicate trades
+        if str(trade) in df_ac['trade'].values:
+            print(f"Duplicate trade detected: {str(trade)}")
+            return
+
         # Filter for the same symbol and asset class in the active portfolio
         df_ac_active = df_ac_active[df_ac_active['deleted'] != True].copy()
         df_ac_active = df_ac_active.sort_values(by='timestamp').groupby(['symbol', 'strategy', 'asset class','position']).last().reset_index()
@@ -395,7 +402,7 @@ class PortfolioManager:
                     df_merged = self.aggregate_positions(existing_position, trade_df)
 
         # Save the updated positions
-        self.save_positions(df_merged)
+        self.save_portfolio(df_merged)
 
     def create_trade_entry(self, strategy_symbol,trade):
         '''Function to create a Dataframe from ib_insync's trade object
@@ -413,6 +420,7 @@ class PortfolioManager:
             'strategy': strategy_symbol,
             'contract': str(trade.contract),
             'trade': str(trade),
+            'trade_context': str(trade),
             'open_dt':datetime.date.today().isoformat(),
             'close_dt': '',
             'deleted': False,
@@ -460,15 +468,16 @@ class PortfolioManager:
         df_to_update['% of nav'] = 0.0
         df_to_update['pnl %'] = 0.0
 
-        if not df_to_update['trade'].iloc[0]:
-            trade_context = trade_df['trade'].iloc[0]
-        elif isinstance(eval(df_to_update['trade'].iloc[0]), str):
-            trade_context = [df_to_update['trade'].iloc[0], trade_df['trade'].iloc[0]]
+        if not df_to_update['trade_context'].iloc[0]:
+            trade_context = trade_df['trade_context'].iloc[0]
+        elif isinstance(eval(df_to_update['trade_context'].iloc[0]), str):
+            trade_context = [df_to_update['trade_context'].iloc[0], trade_df['trade_context'].iloc[0]]
         else:
-            trade_context = eval(df_to_update['trade'].iloc[0])
-            trade_context.append(trade_df['trade'].iloc[0])
+            trade_context = eval(df_to_update['trade_context'].iloc[0])
+            trade_context.append(trade_df['trade_context'].iloc[0])
         
-        df_to_update['trade'] = str(trade_context)
+        df_to_update['trade'] = trade_df['trade'].iloc[0]
+        df_to_update['trade_context'] = trade_context
         df_to_update['close_dt'] = datetime.date.today().isoformat()
         df_to_update['marketValue'] = 0.0
         df_to_update['unrealizedPNL'] = 0.0

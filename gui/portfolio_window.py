@@ -257,31 +257,36 @@ def merge_position_with(tree, merging_row, target_row, df, strategy_manager):
     merging_symbol , merging_asset_class, merging_strategy, merging_position = merging_row
     target_symbol,target_asset_class,target_strategy,target_position = target_row 
 
-    account_id = strategy_manager.portfolio_manager.account_id
-    df_ac = ac.get_library('portfolio').read(f'{account_id}').data
-
-    df_ac_active = df_ac[df_ac['deleted'] != True].copy()
-    latest_active_entries = df_ac_active.sort_values(by='timestamp').groupby(['symbol', 'strategy', 'asset class','position']).last().reset_index()
-    print(latest_active_entries)
-
-    merging_row = latest_active_entries[
-                  (latest_active_entries['symbol'] == merging_row[0]) 
-                & (latest_active_entries['asset class'] == merging_row[1]) 
-                & (latest_active_entries['strategy'] == merging_row[2])
-                & (latest_active_entries['position'] == merging_row[3])
-                ].reset_index(drop=True)
+    merging_row = {'symbol':merging_row[0], 'asset class': merging_row[1],
+                   'strategy': merging_row[2], 'position': merging_row[3]}
+    target_row = {'symbol':target_row[0], 'asset class': target_row[1],
+                   'strategy': target_row[2], 'position': target_row[3]}
     
-    target_row = latest_active_entries[
-                  (latest_active_entries['symbol'] == target_row[0])
-                & (latest_active_entries['asset class'] == target_row[1]) 
-                & (latest_active_entries['strategy'] == target_row[2]) 
-                & (latest_active_entries['position'] == target_row[3])
-                ].reset_index(drop=True)
-
     if merging_position + target_position == 0:
         strategy_manager.portfolio_manager.close_position()
     else:
         strategy_manager.portfolio_manager.aggregate_position()
+    # account_id = strategy_manager.portfolio_manager.account_id
+    # df_ac = ac.get_library('portfolio').read(f'{account_id}').data
+
+    # df_ac_active = df_ac[df_ac['deleted'] != True].copy()
+    # latest_active_entries = df_ac_active.sort_values(by='timestamp').groupby(['symbol', 'strategy', 'asset class','position']).last().reset_index()
+
+    # merging_row = latest_active_entries[
+    #               (latest_active_entries['symbol'] == merging_row[0]) 
+    #             & (latest_active_entries['asset class'] == merging_row[1]) 
+    #             & (latest_active_entries['strategy'] == merging_row[2])
+    #             & (latest_active_entries['position'] == merging_row[3])
+    #             ].reset_index(drop=True)
+    
+    # target_row = latest_active_entries[
+    #               (latest_active_entries['symbol'] == target_row[0])
+    #             & (latest_active_entries['asset class'] == target_row[1]) 
+    #             & (latest_active_entries['strategy'] == target_row[2]) 
+    #             & (latest_active_entries['position'] == target_row[3])
+    #             ].reset_index(drop=True)
+
+
    # strategy_manager.portfolio_manager.merge_positions(tree, row_to_merge, target_row, df)
 
     # Update the treeview after successful merge (potentially in strategy_manager)
