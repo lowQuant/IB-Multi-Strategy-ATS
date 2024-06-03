@@ -268,10 +268,141 @@ class PortfolioManager:
 
         return df_final_sorted
 
-    def save_new_trade_in_global_portfolio_ac(self, strategy_symbol,trade):
-        '''Function called from Strategy Manager.handle_fill_event()
-           that saves the position update in the global account arcticDB'''
-        #print("in save_new_trade_in_global_portfolio_ac function")
+    def match_ib_positions_with_arcticdb(self):
+        # print("print from match_ib_positions_with_arcticdb")
+        if self.account_id in self.portfolio_library.list_symbols():
+            df_ac = self.portfolio_library.read(f'{self.account_id}').data
+            # Filter out deleted entries before comparing
+            df_ac_active = df_ac[df_ac['deleted'] != True].copy()
+            latest_positions_in_ac = df_ac_active.sort_values(by='timestamp').groupby(['symbol', 'strategy', 'asset class']).last().reset_index()
+            # print(latest_positions_in_ac['position'])
+        else:
+            # print(f"Msg from function 'match_ib_positions_with_arcticdb': No Symbol {self.account_id} in library 'portfolio'")
+            df_ib = self.get_positions_from_ib()
+            self.save_portfolio(df_ib)
+            return df_ib
+
+        df_ib = self.get_positions_from_ib()
+        # print(df_ib.head(3))
+        df_merged = pd.DataFrame()
+
+        # Iterate through the positions obtained from Interactive Brokers
+        for index, row in df_ib.iterrows():
+            symbol = row['symbol']
+            asset_class = row['asset class']
+            total_position = row['position']
+
+            # Filter the ArcticDB DataFrame for entries with the same symbol and asset class
+            strategy_entries_in_ac = latest_positions_in_ac[(latest_positions_in_ac['symbol'] == symbol) & (latest_positions_in_ac['asset class'] == asset_class)]
+            sum_of_position_entries = strategy_entries_in_ac['position'].sum()
+            # print(strategy_entries_in_ac)
+            if strategy_entries_in_ac.empty: # no database entry, add position
+                df_merged = pd.concat([df_merged, pd.DataFrame([row])], ignore_index=True)
+
+            elif len(strategy_entries_in_ac) == 1:
+                if total_position == sum_of_position_entries:
+                    # the positions match, we should only update fields relevant for marketdata in ac
+                    strategy_entries_in_ac = self.update_data(strategy_entries_in_ac,row)
+                    df_merged = pd.concat([df_merged, strategy_entries_in_ac], ignore_index=True)
+                else:
+                    #update marketdata relevant fields for the existing db entry
+                    strategy_entries_in_ac = self.update_data(strategy_entries_in_ac,row)
+                    df_merged = pd.concat([df_merged, strategy_entries_in_ac], ignore_index=True)
+                    
+                    # handle the residual and concat to df_merged
+                    residual = self.handle_residual(strategy_entries_in_ac,row)
+                    df_merged = pd.concat([df_merged, residual], ignore_index=True)
+
+            elif len(strategy_entries_in_ac) > 1:
+                if total_position == sum_of_position_entries:
+                    # print("len(strategy_entries_in_ac) > 1 and total_position == sum_of_position_entries")
+                    strategy_entries_in_ac = self.update_data(strategy_entries_in_ac,row)
+                    df_merged = pd.concat([df_merged, strategy_entries_in_ac], ignore_index=True)
+                else:
+                    # print("len(strategy_entries_in_ac) > 1 and total_position != sum_of_position_entries")
+                    #update marketdata relevant fields for the existing db entry
+                    strategy_entries_in_ac = self.update_data(strategy_entries_in_ac,row)
+                    df_merged = pd.concat([df_merged, strategy_entries_in_ac], ignore_index=True)
+                    
+                    # handle the residual and concat to df_merged
+                    residual = self.handle_residual(strategy_entries_in_ac,row)
+                    df_merged = pd.concat([df_merged, residual], ignore_index=True)
+
+        self.save_portfolio(df_merged)
+        self.save_account_pnl()
+        return df_merged
+    
+    def save_portfolio(self, df_merged):
+        '''Function that saves all positions in ArcticDB in portfolio/"account_id".'''
+        if df_merged.empty:
+            return
+        df_merged = self.normalize_columns(df_merged)
+        if self.account_id in self.portfolio_library.list_symbols():
+            self.portfolio_library.append(f'{self.account_id}', df_merged,prune_previous_versions=True,validate_index=True)
+        else:
+            print(f"Creating an arcticdb entry {self.account_id} in library 'portfolio'")
+            self.portfolio_library.write(f'{self.account_id}',df_merged,prune_previous_versions = True,  validate_index=True)
+
+    def save_account_pnl(self):
+        """Saves the PnL (equity value) to the ArcticDB."""
+        current_time = datetime.datetime.now().replace(second=0, microsecond=0)
+        
+        pnl_data = {'total_equity': self.total_equity,'account_id': self.account_id}
+        pnl_df = pd.DataFrame([pnl_data], index=[current_time])
+        try:
+            # Append the new data to the 'pnl' library, creating it if it doesn't exist
+            if self.account_id in self.pnl_library.list_symbols():
+                self.pnl_library.append(self.account_id, pnl_df)
+            else:
+                self.pnl_library.write(self.account_id, pnl_df)
+            print(f"Equity value saved to 'pnl' library for account {self.account_id}")
+        except Exception as e:
+            print(f"Error saving equity value to 'pnl' library: {e}")
+
+    def process_new_trade(self, strategy_symbol, trade):
+        '''Function that processes an ib_insync trade object and stores it in the ArcticDB'''
+        # Create a Dataframe compatible with our ArcticDB data structure
+        trade_df = self.create_trade_entry(strategy_symbol, trade)
+        
+        # Check if this is a new position or an update to an existing position
+        symbol = trade.contract.symbol
+        asset_class = trade.contract.secType
+
+        # Read the current portfolio data
+        if self.account_id in self.portfolio_library.list_symbols():
+            df_ac = self.portfolio_library.read(f'{self.account_id}').data
+            df_ac_active = df_ac[df_ac['deleted'] != True].copy()
+        else:
+            df_ac_active = pd.DataFrame()
+
+        # Filter for the same symbol and asset class in the active portfolio
+        df_ac_active = df_ac_active[df_ac_active['deleted'] != True].copy()
+        df_ac_active = df_ac_active.sort_values(by='timestamp').groupby(['symbol', 'strategy', 'asset class','position']).last().reset_index()
+        existing_position = df_ac_active[(df_ac_active['symbol'] == symbol) & (df_ac_active['asset class'] == asset_class) 
+                                        & (df_ac_active['strategy'] == strategy_symbol)]
+
+        if existing_position.empty:
+            # Simply append new position if it doesn't exist
+            df_merged = pd.concat([df_ac_active, trade_df], ignore_index=True)
+        else:
+            if len(existing_position) > 1:
+                print(f"Error: More than one entry of {asset_class}:{symbol} under {strategy_symbol}.")
+                return
+            else:
+                if existing_position.position + trade_df.position == 0:
+                    self.close_position(existing_position, trade_df)
+                    return
+                else:
+                    # Update existing position or close position
+                    # !TODO: Continue here
+                    df_merged = self.aggregate_positions(existing_position, trade_df)
+
+        # Save the updated positions
+        self.save_positions(df_merged)
+
+    def create_trade_entry(self, strategy_symbol,trade):
+        '''Function to create a Dataframe from ib_insync's trade object
+           for further processing in our arcticDB.'''
 
         try:
             trade_dict = {'timestamp': datetime.datetime.now().strftime('%Y-%m-%d %H:%M'),
@@ -299,102 +430,65 @@ class PortfolioManager:
         except Exception as e:
             print(f"Error processing trade: {e}")
 
-        # print(trade_dict)
-        df = pd.DataFrame([trade_dict])
-        print("saving new trade in DB")
-        print(df)
-        self.save_positions(df)
+        trade_df = pd.DataFrame([trade_dict])
+        return trade_df
 
-    def match_ib_positions_with_arcticdb(self):
-        # print("print from match_ib_positions_with_arcticdb")
-        if self.account_id in self.portfolio_library.list_symbols():
-            df_ac = self.portfolio_library.read(f'{self.account_id}').data
-            # Filter out deleted entries before comparing
-            df_ac_active = df_ac[df_ac['deleted'] != True].copy()
-            latest_positions_in_ac = df_ac_active.sort_values(by='timestamp').groupby(['symbol', 'strategy', 'asset class']).last().reset_index()
-            print(latest_positions_in_ac['position'])
+    def close_position(self,existing_position, trade_df):
+
+        df = self.portfolio_library.read(f'{self.account_id}').data
+
+        if isinstance(existing_position, pd.DataFrame):
+            filter_condition = (df['symbol'] == existing_position.iloc[0]['symbol']) & \
+                        (df['asset class'] == existing_position.iloc[0]['asset class']) & \
+                        (df['position'] == existing_position.iloc[0]['position']) & \
+                        (df['strategy'] == existing_position.iloc[0]['strategy']) & \
+                        (df['deleted'] == False)
+            
+        elif isinstance(existing_position, dict):
+            filter_condition = (df['symbol'] == existing_position['symbol']) & \
+                        (df['asset class'] == existing_position['asset class']) & \
+                        (df['position'] == existing_position['position']) & \
+                        (df['strategy'] == existing_position['strategy']) & \
+                        (df['deleted'] == False)
+
+        # Delete the trade entries among all row entries
+        df.loc[filter_condition, 'deleted'] = True
+        df.loc[filter_condition, 'delete_dt'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')  # Convert to string
+
+        # Select the latest matching entry to update the other columns
+        df_to_update = df[filter_condition][-1:].copy()
+
+        df_to_update['timestamp'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+        df_to_update['marketValue_base'] = 0.0
+        df_to_update['% of nav'] = 0.0
+        df_to_update['pnl %'] = 0.0
+
+        if not df_to_update['trade'].iloc[0]:
+            trade_context = trade_df['trade'].iloc[0]
+        elif isinstance(eval(df_to_update['trade'].iloc[0]), str):
+            trade_context = [df_to_update['trade'].iloc[0], trade_df['trade'].iloc[0]]
         else:
-            print(f"Msg from function 'match_ib_positions_with_arcticdb': No Symbol {self.account_id} in library 'portfolio'")
-            df_ib = self.get_positions_from_ib()
-            self.save_positions(df_ib)
-            return df_ib
-
-        df_ib = self.get_positions_from_ib()
-        print(df_ib.head(3))
-        df_merged = pd.DataFrame()
-
-        # Iterate through the positions obtained from Interactive Brokers
-        for index, row in df_ib.iterrows():
-            symbol = row['symbol']
-            asset_class = row['asset class']
-            total_position = row['position']
-
-            # Filter the ArcticDB DataFrame for entries with the same symbol and asset class
-            strategy_entries_in_ac = latest_positions_in_ac[(latest_positions_in_ac['symbol'] == symbol) & (latest_positions_in_ac['asset class'] == asset_class)]
-            sum_of_position_entries = strategy_entries_in_ac['position'].sum()
-            print(strategy_entries_in_ac)
-            if strategy_entries_in_ac.empty: # no database entry, add position
-                df_merged = pd.concat([df_merged, pd.DataFrame([row])], ignore_index=True)
-
-            elif len(strategy_entries_in_ac) == 1:
-                if total_position == sum_of_position_entries:
-                    # the positions match, we should only update fields relevant for marketdata in ac
-                    strategy_entries_in_ac = self.update_data(strategy_entries_in_ac,row)
-                    df_merged = pd.concat([df_merged, strategy_entries_in_ac], ignore_index=True)
-                else:
-                    #update marketdata relevant fields for the existing db entry
-                    strategy_entries_in_ac = self.update_data(strategy_entries_in_ac,row)
-                    df_merged = pd.concat([df_merged, strategy_entries_in_ac], ignore_index=True)
-                    
-                    # handle the residual and concat to df_merged
-                    residual = self.handle_residual(strategy_entries_in_ac,row)
-                    df_merged = pd.concat([df_merged, residual], ignore_index=True)
-
-            elif len(strategy_entries_in_ac) > 1:
-                if total_position == sum_of_position_entries:
-                    print("len(strategy_entries_in_ac) > 1 and total_position == sum_of_position_entries")
-                    strategy_entries_in_ac = self.update_data(strategy_entries_in_ac,row)
-                    df_merged = pd.concat([df_merged, strategy_entries_in_ac], ignore_index=True)
-                else:
-                    print("len(strategy_entries_in_ac) > 1 and total_position != sum_of_position_entries")
-                    #update marketdata relevant fields for the existing db entry
-                    strategy_entries_in_ac = self.update_data(strategy_entries_in_ac,row)
-                    df_merged = pd.concat([df_merged, strategy_entries_in_ac], ignore_index=True)
-                    
-                    # handle the residual and concat to df_merged
-                    residual = self.handle_residual(strategy_entries_in_ac,row)
-                    df_merged = pd.concat([df_merged, residual], ignore_index=True)
-
-        self.save_positions(df_merged)
-        self.save_account_pnl()
-        return df_merged
-    
-    def save_account_pnl(self):
-        """Saves the PnL (equity value) to the ArcticDB."""
-        current_time = datetime.datetime.now().replace(second=0, microsecond=0)
+            trade_context = eval(df_to_update['trade'].iloc[0])
+            trade_context.append(trade_df['trade'].iloc[0])
         
-        pnl_data = {'total_equity': self.total_equity,'account_id': self.account_id}
-        pnl_df = pd.DataFrame([pnl_data], index=[current_time])
-        try:
-            # Append the new data to the 'pnl' library, creating it if it doesn't exist
-            if self.account_id in self.pnl_library.list_symbols():
-                self.pnl_library.append(self.account_id, pnl_df)
-            else:
-                self.pnl_library.write(self.account_id, pnl_df)
-            print(f"Equity value saved to 'pnl' library for account {self.account_id}")
-        except Exception as e:
-            print(f"Error saving equity value to 'pnl' library: {e}")
+        df_to_update['trade'] = str(trade_context)
+        df_to_update['close_dt'] = datetime.date.today().isoformat()
+        df_to_update['marketValue'] = 0.0
+        df_to_update['unrealizedPNL'] = 0.0
+        df_to_update['realizedPNL'] = (trade_df['averageCost'].iloc[0] - df_to_update['averageCost'].iloc[0]) * abs(df_to_update['position'].iloc[0])
+        df_to_update['deleted'] = True
+        df_to_update['delete_dt'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
 
-    def save_positions(self, df_merged):
-        '''Function that saves positions in ArcticDB in portfolio/"account_id".'''
-        if df_merged.empty:
-            return
-        df_merged = self.normalize_columns(df_merged)
-        if self.account_id in self.portfolio_library.list_symbols():
-            self.portfolio_library.append(f'{self.account_id}', df_merged,prune_previous_versions=True,validate_index=True)
-        else:
-            print(f"Creating an arcticdb entry {self.account_id} in library 'portfolio'")
-            self.portfolio_library.write(f'{self.account_id}',df_merged,prune_previous_versions = True,  validate_index=True)
+         # Append the updated closing entry to the DataFrame
+        df = pd.concat([df, df_to_update], ignore_index=True)
+
+        # Save the updated DataFrame back to ArcticDB
+        df = self.normalize_columns(df)
+        self.portfolio_library.write(f'{self.account_id}', df, prune_previous_versions=True)
+        print(f"Closed position for {existing_position.iloc[0]['symbol']} {existing_position.iloc[0]['asset class']} with strategy {existing_position.iloc[0]['strategy']}")
+
+    def save_position(self,trade_df: pd.DataFrame = None, trade_dict: dict = None, target_row_dict: dict = None):
+        pass
 
     def save_existing_position_to_strategy_portfolio(self,df,strategy):
         '''Function that saves position to portfolio/"account_id"_"strategy symbol"'''

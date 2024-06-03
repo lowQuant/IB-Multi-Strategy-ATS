@@ -68,8 +68,8 @@ class StrategyManager:
         add_log(f"{trade.fills[0].execution.side} {trade.orderStatus.filled} {trade.contract.symbol}@{trade.orderStatus.avgFillPrice} [{strategy_symbol}]")
         
         # # Save and mark trade in the global portfolio
-        self.portfolio_manager.save_new_trade_in_global_portfolio_ac(strategy_symbol, trade)
-        current_portfolio_df = self.portfolio_manager.match_ib_positions_with_arcticdb()
+        self.portfolio_manager.process_new_trade(strategy_symbol, trade)
+        # current_portfolio_df = self.portfolio_manager.match_ib_positions_with_arcticdb()
 
     def handle_status_change(self, strategy_symbol, trade, status):
         if "Pending" not in status:
