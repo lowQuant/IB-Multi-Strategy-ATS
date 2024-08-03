@@ -1,5 +1,5 @@
 # ATS/broker/trade.py
-from ib_insync import *
+from ib_async import *
 from gui.log import add_log
 
 

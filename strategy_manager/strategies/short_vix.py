@@ -1,5 +1,5 @@
 import yfinance as yf
-from ib_insync import *
+from ib_async import *
 import pandas as pd
 import numpy as np
 import datetime, time, asyncio

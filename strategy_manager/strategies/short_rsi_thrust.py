@@ -1,4 +1,4 @@
-from ib_insync import *
+from ib_async import *
 import asyncio
 from broker.trademanager import TradeManager
 from broker import connect_to_IB, disconnect_from_IB

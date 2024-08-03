@@ -65,9 +65,12 @@ class StrategyManager:
         add_log(f"{order_type} Order placed: {action} {quantity} {symbol} [{strategy}]")
 
         if trade.isDone():
+            print("processing new trade")
             self.portfolio_manager.process_new_trade(strategy, trade)
 
     def handle_fill_event(self, strategy_symbol, trade, fill):
+        print("from handle_fill_event:")
+        print(trade)
         add_log(f"{trade.fills[0].execution.side} {trade.orderStatus.filled} {trade.contract.symbol}@{trade.orderStatus.avgFillPrice} [{strategy_symbol}]")
         
         # # Save and mark trade in the global portfolio

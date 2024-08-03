@@ -1,7 +1,7 @@
 # strategy_manager/strategies/SVIX.py
 
 from gui.log import add_log, start_event
-from ib_insync import *
+from ib_async import *
 import time, asyncio
 
 PARAMS = {}

@@ -2,7 +2,7 @@
 
 import pandas as pd
 import math
-from ib_insync import *
+from ib_async import *
 from gui.log import add_log
 import datetime
 import yfinance as yf
@@ -20,8 +20,7 @@ class PortfolioManager:
         else:
             self.portfolio_library = ac.get_library('portfolio', create_if_missing=True)
             self.pnl_library = ac.get_library('pnl', create_if_missing=True)
-        # self.account_id = self.ib.managedAccounts()[0]
-        self.account_id = "test2"
+        self.account_id = self.ib.managedAccounts()[0]
         self.total_equity =  sum(float(entry.value) for entry in self.ib.accountSummary() if entry.tag == "EquityWithLoanValue")
 
     def convert_marketValue_to_base(self,df):
@@ -91,18 +90,41 @@ class PortfolioManager:
             base_value = value / fx_spot
             return base_value
     
-    def update_data(self,output_df,row):
-        '''Function to update dataframe with current market data'''
-
-        self.total_equity =  sum(float(entry.value) for entry in self.ib.accountSummary() if entry.tag == "EquityWithLoanValue")
-        output_df = output_df.copy()
+    def update_and_aggregate_data(self, strategy_entries_in_ac, row):
+        '''Function to update ArcticDB dataframe entries with current market data.
+        Will also combine same strategy symbol positions that resulted from discretionary/ manual trades.''' 
+        
+        self.total_equity = sum(float(entry.value) for entry in self.ib.accountSummary() if entry.tag == "EquityWithLoanValue")
+        output_df = strategy_entries_in_ac.copy()
         output_df['timestamp'] = row['timestamp']
         output_df['marketPrice'] = row['marketPrice']
+
+        # if position amounts in ArcticDB and the actual portfolio do not match for the same symbol 
+        # and there is only one strategy entry, we simply combine them. Else we handle the residual later
+        if (output_df['position'].sum() != row.position): 
+                filter_mask = output_df['strategy'] == row['strategy']
+                missing_amount = row.position - output_df['position'].sum()
+
+                if len(output_df.loc[filter_mask, 'position'] > 0):
+                    # Calculate the new average cost
+                    total_cost = row.averageCost * row.position
+                    total_cost_in_ac = (output_df['averageCost'] * output_df['position']).sum()
+                    res_averageCost = (total_cost - total_cost_in_ac) / missing_amount
+
+                    output_df.loc[filter_mask, 'averageCost'] = (output_df.loc[filter_mask, 'averageCost'] * output_df.loc[filter_mask, 'position'] 
+                                                                + res_averageCost * missing_amount) / (output_df.loc[filter_mask, 'position'] + missing_amount)
+                    output_df.loc[filter_mask, 'position'] += missing_amount 
+
+        output_df['marketValue'] = output_df['marketPrice'] * output_df['position']
         output_df['marketValue_base'] = output_df['marketValue'] / row['fx_rate']
-        output_df['pnl %'] = self.calculate_pnl(row.marketPrice,output_df.averageCost.item(),output_df.position.item(),row.contract)
-        output_df['unrealizedPNL'] = output_df['marketPrice'] - output_df['averageCost']
-        output_df['marketValue'] = (output_df['marketPrice'] * output_df['position']) 
         output_df['% of nav'] = (output_df['marketValue_base'] / self.total_equity) * 100
+        output_df['unrealizedPNL'] = output_df['marketPrice'] - output_df['averageCost']
+
+        if len(output_df) == 1:
+            output_df['pnl %'] = self.calculate_pnl(row.marketPrice, output_df.averageCost.item(), output_df.position.item(), row.contract)
+        else:   # Handle multiple entries
+            output_df['pnl %'] = output_df.apply(lambda x: self.calculate_pnl(x.marketPrice, x.averageCost, x.position, row.contract), axis=1)
+            
         return output_df
 
     def calculate_pnl(self,market_price, average_cost, position, contract=None):
@@ -271,21 +293,17 @@ class PortfolioManager:
         return df_final_sorted
 
     def match_ib_positions_with_arcticdb(self):
-        # print("print from match_ib_positions_with_arcticdb")
         if self.account_id in self.portfolio_library.list_symbols():
             df_ac = self.portfolio_library.read(f'{self.account_id}').data
             # Filter out deleted entries before comparing
             df_ac_active = df_ac[df_ac['deleted'] != True].copy()
             latest_positions_in_ac = df_ac_active.sort_values(by='timestamp').groupby(['symbol', 'strategy', 'asset class']).last().reset_index()
-            # print(latest_positions_in_ac['position'])
         else:
-            # print(f"Msg from function 'match_ib_positions_with_arcticdb': No Symbol {self.account_id} in library 'portfolio'")
             df_ib = self.get_positions_from_ib()
             self.save_portfolio(df_ib)
             return df_ib
 
         df_ib = self.get_positions_from_ib()
-        # print(df_ib.head(3))
         df_merged = pd.DataFrame()
 
         # Iterate through the positions obtained from Interactive Brokers
@@ -297,39 +315,18 @@ class PortfolioManager:
             # Filter the ArcticDB DataFrame for entries with the same symbol and asset class
             strategy_entries_in_ac = latest_positions_in_ac[(latest_positions_in_ac['symbol'] == symbol) & (latest_positions_in_ac['asset class'] == asset_class)]
             sum_of_position_entries = strategy_entries_in_ac['position'].sum()
-            # print(strategy_entries_in_ac)
+
             if strategy_entries_in_ac.empty: # no database entry, add position
                 df_merged = pd.concat([df_merged, pd.DataFrame([row])], ignore_index=True)
+            else:
+                strategy_entry_updated = self.update_and_aggregate_data(strategy_entries_in_ac, row)
+                df_merged = pd.concat([df_merged, strategy_entry_updated], ignore_index=True)
 
-            elif len(strategy_entries_in_ac) == 1:
-                if total_position == sum_of_position_entries:
-                    # the positions match, we should only update fields relevant for marketdata in ac
-                    strategy_entries_in_ac = self.update_data(strategy_entries_in_ac,row)
-                    df_merged = pd.concat([df_merged, strategy_entries_in_ac], ignore_index=True)
-                else:
-                    #update marketdata relevant fields for the existing db entry
-                    strategy_entries_in_ac = self.update_data(strategy_entries_in_ac,row)
-                    df_merged = pd.concat([df_merged, strategy_entries_in_ac], ignore_index=True)
-                    
-                    # handle the residual and concat to df_merged
-                    residual = self.handle_residual(strategy_entries_in_ac,row)
+                if row['position'] - strategy_entry_updated.position.sum() != 0:
+                    # Handle the residual and concat to df_merged
+                    residual = self.handle_residual(strategy_entries_in_ac, row)
                     df_merged = pd.concat([df_merged, residual], ignore_index=True)
-
-            elif len(strategy_entries_in_ac) > 1:
-                if total_position == sum_of_position_entries:
-                    # print("len(strategy_entries_in_ac) > 1 and total_position == sum_of_position_entries")
-                    strategy_entries_in_ac = self.update_data(strategy_entries_in_ac,row)
-                    df_merged = pd.concat([df_merged, strategy_entries_in_ac], ignore_index=True)
-                else:
-                    # print("len(strategy_entries_in_ac) > 1 and total_position != sum_of_position_entries")
-                    #update marketdata relevant fields for the existing db entry
-                    strategy_entries_in_ac = self.update_data(strategy_entries_in_ac,row)
-                    df_merged = pd.concat([df_merged, strategy_entries_in_ac], ignore_index=True)
-                    
-                    # handle the residual and concat to df_merged
-                    residual = self.handle_residual(strategy_entries_in_ac,row)
-                    df_merged = pd.concat([df_merged, residual], ignore_index=True)
-
+        
         self.save_portfolio(df_merged)
         self.save_account_pnl()
         return df_merged

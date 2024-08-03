@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import datetime
-from ib_insync import *
+from ib_async import *
 from data_and_research import get_strategy_allocation_bounds, fetch_strategy_params
 from broker.trademanager import TradeManager
 from gui.log import add_log, start_event

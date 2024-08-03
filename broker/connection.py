@@ -1,6 +1,6 @@
 # ATS/broker/broker.py
 from collections import deque
-from ib_insync import *
+from ib_async import *
 import threading, time
 from gui.log import add_log, start_event
 

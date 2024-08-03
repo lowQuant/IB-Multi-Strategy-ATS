@@ -2,7 +2,7 @@
 import numpy as np
 import pandas as pd
 import yfinance as yf
-from ib_insync import *
+from ib_async import *
 # from gui.log import add_log
 import datetime
 
