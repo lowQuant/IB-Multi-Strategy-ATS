@@ -66,6 +66,7 @@ class StrategyManager:
 
         if trade.isDone():
             print("processing new trade")
+            print(trade)
             self.portfolio_manager.process_new_trade(strategy, trade)
 
     def handle_fill_event(self, strategy_symbol, trade, fill):

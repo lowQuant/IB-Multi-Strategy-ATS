@@ -314,7 +314,6 @@ class PortfolioManager:
 
             # Filter the ArcticDB DataFrame for entries with the same symbol and asset class
             strategy_entries_in_ac = latest_positions_in_ac[(latest_positions_in_ac['symbol'] == symbol) & (latest_positions_in_ac['asset class'] == asset_class)]
-            sum_of_position_entries = strategy_entries_in_ac['position'].sum()
 
             if strategy_entries_in_ac.empty: # no database entry, add position
                 df_merged = pd.concat([df_merged, pd.DataFrame([row])], ignore_index=True)
