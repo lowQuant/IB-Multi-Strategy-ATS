@@ -62,13 +62,14 @@ class StrategyManager:
         action = trade.order.action
         quantity = trade.order.totalQuantity
 
-        add_log(f"{order_type} Order placed: {action} {quantity} {symbol} [{strategy}]")
-
         if trade.isDone():
+            add_log(f"{trade.fills[0].execution.side} {trade.orderStatus.filled} {trade.contract.symbol}@{trade.orderStatus.avgFillPrice} [{trade.order.orderRef}]")
             print("processing new trade")
-            print(trade)
+            # print(trade)
             self.portfolio_manager.process_new_trade(strategy, trade)
-
+        else:
+            add_log(f"{order_type} Order placed: {action} {quantity} {symbol} [{strategy}]")
+            
     def handle_fill_event(self, strategy_symbol, trade, fill):
         print("from handle_fill_event:")
         print(trade)

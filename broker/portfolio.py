@@ -359,6 +359,7 @@ class PortfolioManager:
 
     def process_new_trade(self, strategy_symbol, trade):
         '''Function that processes an ib_insync trade object and stores it in the ArcticDB'''
+        print(f"process_new_trade: func called.")
         # Create a Dataframe compatible with our ArcticDB data structure
         trade_df = self.create_trade_entry(strategy_symbol, trade)
         
@@ -380,28 +381,33 @@ class PortfolioManager:
 
         # Filter for the same symbol and asset class in the active portfolio
         df_ac_active = df_ac_active[df_ac_active['deleted'] != True].copy()
-        df_ac_active = df_ac_active.sort_values(by='timestamp').groupby(['symbol', 'strategy', 'asset class','position']).last().reset_index()
+        # df_ac_active = df_ac_active.sort_values(by='timestamp').groupby(['symbol', 'strategy', 'asset class','position']).last().reset_index()
+        df_ac_active = df_ac_active.sort_values(by='timestamp').groupby(['symbol', 'strategy', 'asset class']).last().reset_index()
         existing_position = df_ac_active[(df_ac_active['symbol'] == symbol) & (df_ac_active['asset class'] == asset_class) 
                                         & (df_ac_active['strategy'] == strategy_symbol)]
 
         if existing_position.empty:
             # Simply append new position if it doesn't exist
+            print(f"process_new_trade: No entry in ArcticDB. Simple save.")
             df_merged = pd.concat([df_ac_active, trade_df], ignore_index=True)
         else:
             if len(existing_position) > 1:
+                print(existing_position)
                 print(f"Error: More than one entry of {asset_class}:{symbol} under {strategy_symbol}.")
                 return
             else:
-                if existing_position.position + trade_df.position == 0:
+                if existing_position.position.item() + trade_df.position.item() == 0:
+                    print(f"process_new_trade: need to close position.")
                     self.close_position(existing_position, trade_df)
                     return
                 else:
                     # Update existing position or close position
                     # !TODO: Continue here
+                    print(f"process_new_trade: Aggregating positions.")
                     df_merged = self.aggregate_positions(existing_position, trade_df)
-
+            
         # Save the updated positions
-        self.save_portfolio(df_merged)
+        self.save_portfolio(df_merged.reset_index(drop=True))
 
     def create_trade_entry(self, strategy_symbol,trade):
         '''Function to create a Dataframe from ib_insync's trade object
@@ -491,6 +497,42 @@ class PortfolioManager:
         df = self.normalize_columns(df)
         self.portfolio_library.write(f'{self.account_id}', df, prune_previous_versions=True)
         print(f"Closed position for {existing_position.iloc[0]['symbol']} {existing_position.iloc[0]['asset class']} with strategy {existing_position.iloc[0]['strategy']}")
+
+    def aggregate_positions(self, existing_position, trade_df):
+        '''Function to aggregate existing positions with new trade data'''
+        df_merged = existing_position.copy()
+
+        # Calculate new aggregated position
+        total_position = existing_position['position'].iloc[0] + trade_df['position'].iloc[0]
+        total_cost = (existing_position['averageCost'].iloc[0] * abs(existing_position['position'].iloc[0]) + 
+                    trade_df['averageCost'].iloc[0] * abs(trade_df['position'].iloc[0]))
+
+        new_average_cost = total_cost / abs(total_position)
+
+        df_merged['position'] = total_position
+        df_merged['averageCost'] = new_average_cost
+
+        # Update the rest of the fields based on new position
+        df_merged['timestamp'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+        df_merged['marketPrice'] = trade_df['marketPrice'].iloc[0]
+        df_merged['marketValue'] = df_merged['marketPrice'] * df_merged['position']
+        df_merged['marketValue_base'] = df_merged['marketValue'] / trade_df['fx_rate'].iloc[0]
+        df_merged['% of nav'] = (df_merged['marketValue_base'] / self.total_equity) * 100
+        df_merged['unrealizedPNL'] = (df_merged['marketPrice'] - df_merged['averageCost']) * df_merged['position']
+
+        # Handle trade context
+        if not existing_position['trade_context'].iloc[0]:
+            trade_context = trade_df['trade_context'].iloc[0]
+        elif isinstance(existing_position['trade_context'].iloc[0], str):
+            trade_context = [existing_position['trade_context'].iloc[0], trade_df['trade_context'].iloc[0]]
+        else:
+            trade_context = eval(existing_position['trade_context'].iloc[0])
+            trade_context.append(trade_df['trade_context'].iloc[0])
+        
+        df_merged['trade_context'] = str(trade_context)
+        df_merged['trade'] = trade_df['trade'].iloc[0]
+        
+        return df_merged
 
     def save_position(self,trade_df: pd.DataFrame = None, trade_dict: dict = None, target_row_dict: dict = None):
         pass
