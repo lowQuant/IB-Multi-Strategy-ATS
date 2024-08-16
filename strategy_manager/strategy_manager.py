@@ -47,7 +47,7 @@ class StrategyManager:
 
     def handle_message(self, message):
         # Implement your logic to handle different message types
-        print(f"Received message: {message['info']}")  # Example message handling
+        print(f"Received message: {message}")  # Example message handling
         if message['type'] == 'order':
             self.notify_order_placement(message['strategy'], message['trade'])
         elif message['type'] == 'fill':
