@@ -47,7 +47,10 @@ class StrategyManager:
 
     def handle_message(self, message):
         # Implement your logic to handle different message types
-        print(f"Received message: {message['info']}")  # Example message handling
+        try:
+            print(f"Received message: {message['info']}")  # Example message handling
+        except:
+            print("Exception occured in handling message from queue.")
         if message['type'] == 'order':
             self.notify_order_placement(message['strategy'], message['trade'])
         elif message['type'] == 'fill':
@@ -64,7 +67,7 @@ class StrategyManager:
 
         if trade.isDone():
             add_log(f"{trade.fills[0].execution.side} {trade.orderStatus.filled} {trade.contract.symbol}@{trade.orderStatus.avgFillPrice} [{trade.order.orderRef}]")
-            print("processing new trade")
+            print(f"Processing {trade.contract.symbol} for strategy [{trade.order.orderRef}]")
             # print(trade)
             self.portfolio_manager.process_new_trade(strategy, trade)
         else:
