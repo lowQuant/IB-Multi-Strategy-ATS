@@ -52,14 +52,14 @@ class PortfolioManager:
                 fx_pair = Forex(base_currency+currency)
                 self.ib.reqMarketDataType(4)  # Ensure market data type is set
                 self.ib.qualifyContracts(fx_pair)
-                price = self.ib.reqMktData(fx_pair, '', False, False)
+                rate = self.ib.reqMktData(fx_pair, '', False, False)
                 self.ib.sleep(0.2)  # Wait for data
-                if type(price.marketPrice()) == float and not math.isnan(price.marketPrice()):
-                    self.fx_cache[(currency, base_currency)] = price.marketPrice()
+                if type(rate.marketPrice()) == float and not math.isnan(rate.marketPrice()):
+                    self.fx_cache[(currency, base_currency)] = rate.marketPrice()
                 else:
-                    if type(price.close) == float:
-                        if not math.isnan(price.close):
-                            self.fx_cache[(currency, base_currency)] = price.close
+                    if type(rate.close) == float:
+                        if not math.isnan(rate.close):
+                            self.fx_cache[(currency, base_currency)] = rate.close
                         else:
                             print("Using YF to get fx quote. Check IB connection for market data subscription. ")
                             ticker = f"{base_currency}{currency}=X"
@@ -68,8 +68,8 @@ class PortfolioManager:
                             except:
                                 rate = 1.0
                             self.fx_cache[(currency, base_currency)] = rate
-
-        return self.fx_cache[(currency, base_currency)]
+                            
+        return self.fx_cache[(currency,base_currency)]
 
     def convert_to_base_currency(self,value: float, currency: str):
         currency = currency.upper()
@@ -359,6 +359,7 @@ class PortfolioManager:
 
     def process_new_trade(self, strategy_symbol, trade):
         '''Function that processes an ib_insync trade object and stores it in the ArcticDB'''
+        print(f"process_new_trade: func called.")
         # Create a Dataframe compatible with our ArcticDB data structure
         trade_df = self.create_trade_entry(strategy_symbol, trade)
         
@@ -403,22 +404,27 @@ class PortfolioManager:
                     # !TODO: Continue here
                     print(f"process_new_trade: Aggregating trade under symbol {symbol}")
                     df_merged = self.aggregate_positions(existing_position, trade_df)
-
+            
         # Save the updated positions
-        self.save_portfolio(df_merged)
+        self.save_portfolio(df_merged.reset_index(drop=True))
 
     def create_trade_entry(self, strategy_symbol,trade):
         '''Function to create a Dataframe from ib_insync's trade object
            for further processing in our arcticDB.'''
-
+        fx_rate = self.get_fx_rate(trade.contract.currency,self.base)
+        cost = trade.orderStatus.avgFillPrice
+        qty = trade.order.totalQuantity
+        value = cost*qty
+        value_base = value / fx_rate
+        
         try:
             trade_dict = {'timestamp': datetime.datetime.now().strftime('%Y-%m-%d %H:%M'),
             'symbol': trade.contract.symbol,
             'asset class': trade.contract.secType,
-            'position': trade.order.totalQuantity,
-            '% of nav': 0.0, # to be calculated
-            'averageCost': trade.orderStatus.avgFillPrice,
-            'marketPrice': trade.orderStatus.lastFillPrice,
+            'position': qty,
+            '% of nav': value_base / self.total_equity  , # to be calculated
+            'averageCost': cost,
+            'marketPrice': cost,
             'pnl %': 0.0, # to be calculated
             'strategy': strategy_symbol,
             'contract': str(trade.contract),
@@ -428,13 +434,13 @@ class PortfolioManager:
             'close_dt': '',
             'deleted': False,
             'delete_dt': '',
-            'marketValue': 0.0, # to be calculated
+            'marketValue': value, # to be calculated
             'unrealizedPNL': 0.0, # to be calculated
             'currency':trade.contract.currency,
             'realizedPNL': 0.0, # to be calculated
             'account': trade.fills[0].execution.acctNumber,
-            'marketValue_base': 0.0, # to be calculated
-            'fx_rate': 0.0}
+            'marketValue_base': value_base, # to be calculated
+            'fx_rate': fx_rate}
         except Exception as e:
             print(f"Error processing trade: {e}")
 
