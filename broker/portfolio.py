@@ -362,7 +362,7 @@ class PortfolioManager:
         print(f"process_new_trade: func called.")
         # Create a Dataframe compatible with our ArcticDB data structure
         trade_df = self.create_trade_entry(strategy_symbol, trade)
-        
+        print(trade_df)
         # Check if this is a new position or an update to an existing position
         symbol = trade.contract.symbol
         asset_class = trade.contract.secType
@@ -413,7 +413,7 @@ class PortfolioManager:
            for further processing in our arcticDB.'''
         fx_rate = self.get_fx_rate(trade.contract.currency,self.base)
         cost = trade.orderStatus.avgFillPrice
-        qty = trade.order.totalQuantity
+        qty =  trade.order.totalQuantity *(-1) if trade.order.action == 'SELL' else trade.order.totalQuantity 
         value = cost*qty
         value_base = value / fx_rate
         
@@ -511,7 +511,7 @@ class PortfolioManager:
         total_cost = (existing_position['averageCost'].iloc[0] * abs(existing_position['position'].iloc[0]) + 
                     trade_df['averageCost'].iloc[0] * abs(trade_df['position'].iloc[0]))
 
-        new_average_cost = total_cost / abs(total_position)
+        new_average_cost = total_cost / ( abs(existing_position['position'].iloc[0]) + abs(trade_df['position'].iloc[0]) )
 
         df_merged['position'] = total_position
         df_merged['averageCost'] = new_average_cost

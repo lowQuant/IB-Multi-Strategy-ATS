@@ -84,9 +84,6 @@ def create_info_bar(strategy_manager,tab_control):
     date_label = tk.Label(info_and_controls_frame, text=f"Date: {datetime.now().strftime('%Y-%m-%d')}")
     date_label.pack(side=tk.RIGHT, padx=5)
 
-    # refresh_button = tk.Button(info_and_controls_frame, text="Refresh", command=lambda: refresh_portfolio_data(tree, strategy_manager))
-    # refresh_button.pack(side=tk.RIGHT, padx=5)
-
     # Pack the NAV, Cash, and Margin labels into the account_info_frame
     tk.Label(account_info_frame, text=f"NAV: {total_equity:.2f}").pack(side=tk.LEFT)
     tk.Label(account_info_frame, text=f" Cash: {cash:.2f}").pack(side=tk.LEFT)
@@ -128,6 +125,9 @@ def populate_portfolio_tab(window,strategy_manager,portfolio_tab,info_and_contro
 
         refresh_button = tk.Button(info_and_controls_frame, text="Refresh", command=lambda: refresh_portfolio_data(tree, strategy_manager))
         refresh_button.pack(side=tk.RIGHT, padx=5)
+        # Adding "Reset" button
+        reset_button = tk.Button(info_and_controls_frame, text="Reset", command=lambda: reset_portfolio(strategy_manager))
+        reset_button.pack(side=tk.RIGHT, padx=5)
 
         # Add a strategy dropdown for each row in a separate column
         def on_strategy_cell_click(event, strategies, df):
@@ -169,6 +169,29 @@ def populate_portfolio_tab(window,strategy_manager,portfolio_tab,info_and_contro
         tree.bind("<Button-2>", lambda e: on_right_click(e, tree, df,strategy_manager)) 
         tree.bind("<Button-3>", lambda e: on_right_click(e, tree, df,strategy_manager))
         scrollbar.config(command=tree.yview)
+
+    def reset_portfolio(strategy_manager):
+        # Ask for confirmation before resetting the portfolio
+        confirm = tk.messagebox.askyesno("Confirm Reset", "Are you sure you want to reset the entire portfolio? This action cannot be undone and may take some time.")
+        
+        if confirm:
+            # Show an info message to the user
+            tk.messagebox.showinfo("Resetting Portfolio", "Resetting the portfolio now. Please wait, this may take a while.")
+            
+            try:
+                # Delete the portfolio library
+                strategy_manager.portfolio_manager.delete_symbol_from_portfolio_lib(strategy_manager.portfolio_manager.account_id)
+                print("Portfolio library has been reset.")
+                
+                # Refresh the portfolio view
+                refresh_portfolio_data(tree, strategy_manager)
+
+                # Show completion message
+                tk.messagebox.showinfo("Reset Complete", "The portfolio has been successfully reset.")
+            except Exception as e:
+                print(f"Error resetting portfolio: {e}")
+                tk.messagebox.showerror("Error", f"An error occurred while resetting the portfolio: {e}")
+
 
     def on_right_click(event, tree, df,strategy_manager):
         # Identify the row and column that was clicked
