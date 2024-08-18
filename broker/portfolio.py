@@ -127,6 +127,32 @@ class PortfolioManager:
             
         return output_df
 
+    def update_market_data_for_arcticdb_positions(self, row):
+        '''Function to update market data (marketPrice, marketValue, unrealizedPNL, etc.) for ArcticDB entries 
+        that are not found in broker data.'''
+        
+        contract = eval(row['contract'])  # Convert the contract string back to the contract object
+        self.ib.qualifyContracts(contract)
+
+        fx_rate = self.get_fx_rate(contract.currency,self.base)
+        row['fx_rate'] = fx_rate
+
+        # Request live market data for the contract
+        market_data = self.ib.reqMktData(contract, '', False, False)
+        self.ib.sleep(1)  # Ensure sufficient time for data to populate
+        
+        # Update market-related fields
+        row['marketPrice'] = market_data.marketPrice()
+        row['marketValue'] = row['marketPrice'] * row['position']
+        row['marketValue_base'] = row['marketValue'] / row['fx_rate']
+        row['unrealizedPNL'] = (row['marketPrice'] - row['averageCost']) * row['position']
+        row['timestamp'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+        
+        # You can update other fields as necessary (e.g., `% of nav`)
+        row['% of nav'] = (row['marketValue_base'] / self.total_equity) * 100
+        
+        return row
+
     def calculate_pnl(self,market_price, average_cost, position, contract=None):
         """
         Calculate PNL percentage based on market price, average cost, and position.
@@ -321,11 +347,24 @@ class PortfolioManager:
                 strategy_entry_updated = self.update_and_aggregate_data(strategy_entries_in_ac, row)
                 df_merged = pd.concat([df_merged, strategy_entry_updated], ignore_index=True)
 
-                if row['position'] - strategy_entry_updated.position.sum() != 0:
+                if total_position - strategy_entry_updated.position.sum() != 0:
                     # Handle the residual and concat to df_merged
                     residual = self.handle_residual(strategy_entries_in_ac, row)
                     df_merged = pd.concat([df_merged, residual], ignore_index=True)
         
+        # Now, handle ArcticDB positions that aren't represented in the broker's data (e.g., strategies with net-zero positions)
+        for _, row in latest_positions_in_ac.iterrows():
+            symbol = row['symbol']
+            asset_class = row['asset class']
+
+            # Check if this position is not already accounted for in df_merged, then update market data
+            if df_merged[(df_merged['symbol'] == symbol) & (df_merged['asset class'] == asset_class)].empty:
+                # Update the market data for stale entries
+                row = self.update_market_data_for_arcticdb_positions(row)
+
+                # Otherwise, maintain the strategy-specific position, even if the broker doesn't report it
+                df_merged = pd.concat([df_merged, pd.DataFrame([row])], ignore_index=True)
+
         self.save_portfolio(df_merged)
         self.save_account_pnl()
         return df_merged
@@ -388,21 +427,21 @@ class PortfolioManager:
 
         if existing_position.empty:
             # Simply append new position if it doesn't exist
-            print(f"process_new_trade: Saving new position in ArcticDB under symbol {symbol}")
+            print(f"Processing a new trade: Saving {symbol} for strategy '{strategy_symbol}'")
             df_merged = pd.concat([df_ac_active, trade_df], ignore_index=True)
         else:
             if len(existing_position) > 1:
                 print(existing_position)
-                print(f"Error: More than one entry of {asset_class}:{symbol} under {strategy_symbol}.")
+                print(f"Error: More than one entry of {asset_class}:{symbol} under '{strategy_symbol}'.")
                 return
             else:
                 if existing_position.position.item() + trade_df.position.item() == 0:
+                    print(f"Processing a new trade: Closing {symbol} in strategy '{strategy_symbol}'")
                     self.close_position(existing_position, trade_df)
                     return
                 else:
                     # Update existing position or close position
-                    # !TODO: Continue here
-                    print(f"process_new_trade: Aggregating trade under symbol {symbol}")
+                    print(f"Processing a new trade: Aggregating {symbol} to strategy '{strategy_symbol}'")
                     df_merged = self.aggregate_positions(existing_position, trade_df)
             
         # Save the updated positions
@@ -422,7 +461,7 @@ class PortfolioManager:
             'symbol': trade.contract.symbol,
             'asset class': trade.contract.secType,
             'position': qty,
-            '% of nav': value_base / self.total_equity  , # to be calculated
+            '% of nav': (value_base / self.total_equity) *100  , # to be calculated
             'averageCost': cost,
             'marketPrice': cost,
             'pnl %': 0.0, # to be calculated
@@ -486,7 +525,7 @@ class PortfolioManager:
             trade_context.append(trade_df['trade_context'].iloc[0])
         
         df_to_update['trade'] = trade_df['trade'].iloc[0]
-        df_to_update['trade_context'] = trade_context
+        df_to_update['trade_context'] = str(trade_context)
         df_to_update['close_dt'] = datetime.date.today().isoformat()
         df_to_update['marketValue'] = 0.0
         df_to_update['unrealizedPNL'] = 0.0
@@ -498,7 +537,7 @@ class PortfolioManager:
         df = pd.concat([df, df_to_update], ignore_index=True)
 
         # Save the updated DataFrame back to ArcticDB
-        df = self.normalize_columns(df)
+        df = self.normalize_columns(df.reset_index(drop=True))
         self.portfolio_library.write(f'{self.account_id}', df, prune_previous_versions=True)
         print(f"Closed position for {existing_position.iloc[0]['symbol']} {existing_position.iloc[0]['asset class']} with strategy {existing_position.iloc[0]['strategy']}")
 
@@ -535,7 +574,11 @@ class PortfolioManager:
         
         df_merged['trade_context'] = str(trade_context)
         df_merged['trade'] = trade_df['trade'].iloc[0]
-        
+
+        # New idea - marking the existing position as deleted
+        existing_position['deleted'] = True
+        existing_position['delete_dt'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')  # Convert to string
+        df_merged = pd.concat([df_merged, existing_position], ignore_index=True)
         return df_merged
     
     def save_position(self,trade_df: pd.DataFrame = None, trade_dict: dict = None, target_row_dict: dict = None):
