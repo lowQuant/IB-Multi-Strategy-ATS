@@ -7,7 +7,7 @@ from broker import connect_to_IB, disconnect_from_IB
 from strategy_manager import StrategyManager
 from .log import add_log, start_event
 from .portfolio_window import open_portfolio_window
-
+from .database_window import open_database_window
 
 # ... other imports ...
 
@@ -44,6 +44,12 @@ def open_portfolio():
         strategy_manager = StrategyManager()
     open_portfolio_window(strategy_manager)
 
+def open_database():
+    global strategy_manager
+    if not strategy_manager:
+        strategy_manager = StrategyManager()
+    # Assuming you have some function to open a database window in your GUI
+    open_database_window(strategy_manager.data_manager)
 
 def exit_application(window):
     """ Exit the application gracefully. """

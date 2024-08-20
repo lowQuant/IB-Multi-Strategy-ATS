@@ -4,11 +4,14 @@ import importlib.util
 import os, queue, datetime
 import threading, asyncio
 import pandas as pd
-from data_and_research.utils import fetch_strategies
+
 from gui.log import add_log
 from broker import connect_to_IB,disconnect_from_IB
 from broker.trademanager import TradeManager
 from broker.portfolio import PortfolioManager
+
+from data_and_research.utils import fetch_strategies
+from data_and_research.data_manager import DataManager
 
 class StrategyManager:
     def __init__(self):
@@ -19,6 +22,7 @@ class StrategyManager:
         self.strategies = []
         self.trade_manager = TradeManager(ib_client=self.ib_client,strategy_manager=self)
         self.portfolio_manager = PortfolioManager(ib_client=self.ib_client)
+        self.data_manager = DataManager(ib_client= self.ib_client)
         
         self.message_queue = queue.Queue()
 
