@@ -1,16 +1,34 @@
+import platform
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 
 class DatabaseWindow:
     def __init__(self, master, data_manager):
         self.master = master
         self.data_manager = data_manager
         self.arctic = data_manager.arctic
+    
+        # Detect and store the operating system
+        self.operating_system = self.detect_operating_system()
+        print(f"Operating System Detected: {self.operating_system}")
+
         self.init_window()
 
+    def detect_operating_system(self):
+        """Detect and return the current operating system."""
+        os_name = platform.system()
+        if os_name == 'Windows':
+            return 'Windows'
+        elif os_name == 'Linux':
+            return 'Linux'
+        elif os_name == 'Darwin':  # macOS
+            return 'macOS'
+        else:
+            return 'Unknown OS'
+        
     def init_window(self):
         self.master.title(f"{'Database Manager'}")
-        self.master.geometry("800x600")
+        self.master.geometry("1000x600")
 
         # Create tabs
         self.tab_control = ttk.Notebook(self.master)
@@ -160,17 +178,42 @@ class DatabaseWindow:
 
     # SETUP TAB
     def setup_task_tab(self):
-        # Example label
         label = ttk.Label(self.task_tab, text="Task Scheduler Area")
         label.pack(pady=10)
 
-        # Example scheduler setup
+        # Text field for displaying the selected file path
+        self.file_path_var = tk.StringVar()
+        file_path_entry = ttk.Entry(self.task_tab, textvariable=self.file_path_var, width=50)
+        file_path_entry.pack(pady=5)
+
+        # Button to open file dialog
+        select_file_button = ttk.Button(self.task_tab, text="Select Python File", command=self.open_file_dialog)
+        select_file_button.pack(pady=5)
+
+        # Button to schedule the task (this will be implemented in further steps)
         schedule_button = ttk.Button(self.task_tab, text="Schedule Task", command=self.schedule_task)
-        schedule_button.pack()
+        schedule_button.pack(pady=5)
+
+    def open_file_dialog(self):
+        """Open a file dialog for the user to select a Python file."""
+        file_path = filedialog.askopenfilename(
+            title="Select Python File",
+            filetypes=[("Python Files", "*.py"), ("All Files", "*.*")]
+        )
+        if file_path:
+            # Update the text field with the selected file path
+            self.file_path_var.set(file_path)
 
     def schedule_task(self):
-        # This function could schedule data-related tasks
-        messagebox.showinfo("Information", "Task scheduled successfully!")
+        """Schedule the selected Python file as a task."""
+        file_path = self.file_path_var.get()
+        if not file_path:
+            messagebox.showerror("Error", "Please select a Python file first.")
+            return
+
+        # For now, just show a success message (scheduling logic will be implemented later)
+        messagebox.showinfo("Information", f"Task scheduled successfully for {file_path}!")
+
 
 def open_database_window(data_manager):
     root = tk.Tk()
