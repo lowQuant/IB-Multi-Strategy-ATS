@@ -374,6 +374,10 @@ class PortfolioManager:
         if df_merged.empty:
             return
         df_merged = self.normalize_columns(df_merged)
+        
+        # Drop rows where the position is zero
+        df_merged = df_merged[df_merged['position'] != 0]
+
         if self.account_id in self.portfolio_library.list_symbols():
             self.portfolio_library.append(f'{self.account_id}', df_merged,prune_previous_versions=True,validate_index=True)
         else:
@@ -518,7 +522,7 @@ class PortfolioManager:
 
         if not df_to_update['trade_context'].iloc[0]:
             trade_context = trade_df['trade_context'].iloc[0]
-        elif isinstance(eval(df_to_update['trade_context'].iloc[0]), str):
+        elif isinstance(df_to_update['trade_context'].iloc[0], str):
             trade_context = [df_to_update['trade_context'].iloc[0], trade_df['trade_context'].iloc[0]]
         else:
             trade_context = eval(df_to_update['trade_context'].iloc[0])
