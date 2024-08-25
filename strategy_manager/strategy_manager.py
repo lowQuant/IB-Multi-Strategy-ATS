@@ -8,7 +8,7 @@ import pandas as pd
 from gui.log import add_log
 from broker import connect_to_IB,disconnect_from_IB
 from broker.trademanager import TradeManager
-from broker.portfolio import PortfolioManager
+from broker.portfoliomanager import PortfolioManager
 
 from data_and_research.utils import fetch_strategies
 from data_and_research.data_manager import DataManager
