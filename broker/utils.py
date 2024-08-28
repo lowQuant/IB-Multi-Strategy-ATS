@@ -44,11 +44,10 @@ class FXCache:
         return df
 
 def create_position_dict(portfoliomanager,item):
-    return {'date':datetime.date.today().isoformat(),
-            'timestamp': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'symbol': item.contract.symbol,
+    return {'symbol': item.contract.symbol,
             'asset class': get_asset_class(item),
             'position':item.position,
+            'timestamp': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             '% of nav':(item.marketValue/portfoliomanager.total_equity) * 100,
             'averageCost': item.averageCost,
             'marketPrice': item.marketPrice,
