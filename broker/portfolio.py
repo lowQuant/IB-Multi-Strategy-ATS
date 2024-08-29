@@ -146,7 +146,7 @@ class PortfolioManager:
         row['marketValue'] = row['marketPrice'] * row['position']
         row['marketValue_base'] = row['marketValue'] / row['fx_rate']
         row['unrealizedPNL'] = (row['marketPrice'] - row['averageCost']) * row['position']
-        row['timestamp'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+        row['timestamp'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
         # You can update other fields as necessary (e.g., `% of nav`)
         row['% of nav'] = (row['marketValue_base'] / self.total_equity) * 100
@@ -204,7 +204,7 @@ class PortfolioManager:
 
         # Prepare the residual row data
         residual_row = {
-            'timestamp': datetime.datetime.now().strftime('%Y-%m-%d %H:%M'),
+            'timestamp': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'symbol': row['symbol'],
             'asset class': row['asset class'],
             'position': residual_position,
@@ -256,7 +256,7 @@ class PortfolioManager:
                 pnl = pnl *(-1) if item.position < 0 else pnl
                 asset_class = contractType
                     
-            position_dict = {'timestamp': datetime.datetime.now().strftime('%Y-%m-%d %H:%M'),
+            position_dict = {'timestamp': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                             'symbol': symbol,
                             'asset class': asset_class,
                             'position':item.position,
@@ -318,6 +318,44 @@ class PortfolioManager:
 
         return df_final_sorted
 
+    def overwrite_portfolio(self, df_merged):
+        '''Function that overwrites matching positions in ArcticDB in portfolio/"account_id".'''
+        if df_merged.empty:
+            print("No data provided to overwrite.")
+            return
+        
+        df_merged = self.normalize_columns(df_merged)
+
+        # Read the existing data from ArcticDB if it exists
+        if self.account_id in self.portfolio_library.list_symbols():
+            df_existing = self.portfolio_library.read(f'{self.account_id}').data
+            # Only consider active entries that have not been marked as deleted
+            df_existing_active = df_existing[df_existing['deleted'] != True]
+
+            # Identify entries to update by merging on symbol, asset class, and strategy
+            key_columns = ['symbol', 'asset class', 'strategy']
+            df_final = pd.merge(df_existing_active, df_merged, on=key_columns, how='left', indicator=True, suffixes=('', '_new'))
+
+            # Update existing rows with new data where available
+            update_cols = df_merged.columns.difference(['symbol', 'asset class', 'strategy'])
+            for col in update_cols:
+                df_final[col] = df_final[col + '_new'].combine_first(df_final[col])
+
+            # Drop the temporary new columns and rows only from the new data that don't match
+            df_final.drop(columns=[col + '_new' for col in update_cols], inplace=True)
+            df_final = df_final[df_final['_merge'] != 'right_only']
+
+            # Drop the merge indicator column
+            df_final.drop('_merge', axis=1, inplace=True)
+
+            # Ensure all updates are written back as a new snapshot, removing previous versions
+            self.portfolio_library.write(f'{self.account_id}', df_final, prune_previous_versions=True, validate_index=True)
+            print("Portfolio data overwritten successfully.")
+        else:
+            # If no data exists yet, write new data
+            self.portfolio_library.write(f'{self.account_id}', df_merged, prune_previous_versions=True, validate_index=True)
+            print(f"New portfolio data created for account {self.account_id}.")
+            
     def match_ib_positions_with_arcticdb(self):
         if self.account_id in self.portfolio_library.list_symbols():
             df_ac = self.portfolio_library.read(f'{self.account_id}').data
@@ -365,7 +403,8 @@ class PortfolioManager:
                 # Otherwise, maintain the strategy-specific position, even if the broker doesn't report it
                 df_merged = pd.concat([df_merged, pd.DataFrame([row])], ignore_index=True)
 
-        self.save_portfolio(df_merged)
+        # self.save_portfolio(df_merged)
+        self.overwrite_portfolio(df_merged)
         self.save_account_pnl()
         return df_merged
     
@@ -374,9 +413,12 @@ class PortfolioManager:
         if df_merged.empty:
             return
         df_merged = self.normalize_columns(df_merged)
-        
+
         # Drop rows where the position is zero
         df_merged = df_merged[df_merged['position'] != 0]
+
+        # Reset index to ensure continuous indexing
+        df_merged.reset_index(drop=True, inplace=True)
 
         if self.account_id in self.portfolio_library.list_symbols():
             self.portfolio_library.append(f'{self.account_id}', df_merged,prune_previous_versions=True,validate_index=True)
@@ -461,7 +503,7 @@ class PortfolioManager:
         value_base = value / fx_rate
         
         try:
-            trade_dict = {'timestamp': datetime.datetime.now().strftime('%Y-%m-%d %H:%M'),
+            trade_dict = {'timestamp': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'symbol': trade.contract.symbol,
             'asset class': trade.contract.secType,
             'position': qty,
@@ -515,18 +557,18 @@ class PortfolioManager:
         # Select the latest matching entry to update the other columns
         df_to_update = df[filter_condition][-1:].copy()
 
-        df_to_update['timestamp'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+        df_to_update['timestamp'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         df_to_update['marketValue_base'] = 0.0
         df_to_update['% of nav'] = 0.0
         df_to_update['pnl %'] = 0.0
 
         if not df_to_update['trade_context'].iloc[0]:
             trade_context = trade_df['trade_context'].iloc[0]
-        elif isinstance(df_to_update['trade_context'].iloc[0], str):
-            trade_context = [df_to_update['trade_context'].iloc[0], trade_df['trade_context'].iloc[0]]
-        else:
+        elif isinstance(eval(df_to_update['trade_context'].iloc[0]), list):
             trade_context = eval(df_to_update['trade_context'].iloc[0])
             trade_context.append(trade_df['trade_context'].iloc[0])
+        else:
+            trade_context = [df_to_update['trade_context'].iloc[0], trade_df['trade_context'].iloc[0]]
         
         df_to_update['trade'] = trade_df['trade'].iloc[0]
         df_to_update['trade_context'] = str(trade_context)
@@ -535,7 +577,7 @@ class PortfolioManager:
         df_to_update['unrealizedPNL'] = 0.0
         df_to_update['realizedPNL'] = (trade_df['averageCost'].iloc[0] - df_to_update['averageCost'].iloc[0]) * abs(df_to_update['position'].iloc[0])
         df_to_update['deleted'] = True
-        df_to_update['delete_dt'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+        df_to_update['delete_dt'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
          # Append the updated closing entry to the DataFrame
         df = pd.concat([df, df_to_update], ignore_index=True)
@@ -560,7 +602,7 @@ class PortfolioManager:
         df_merged['averageCost'] = new_average_cost
 
         # Update the rest of the fields based on new position
-        df_merged['timestamp'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+        df_merged['timestamp'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         df_merged['marketPrice'] = trade_df['marketPrice'].iloc[0]
         df_merged['marketValue'] = df_merged['marketPrice'] * df_merged['position']
         df_merged['marketValue_base'] = df_merged['marketValue'] / trade_df['fx_rate'].iloc[0]
@@ -570,11 +612,11 @@ class PortfolioManager:
         # Handle trade context
         if not existing_position['trade_context'].iloc[0]:
             trade_context = trade_df['trade_context'].iloc[0]
-        elif isinstance(existing_position['trade_context'].iloc[0], str):
-            trade_context = [existing_position['trade_context'].iloc[0], trade_df['trade_context'].iloc[0]]
-        else:
+        elif isinstance(eval(existing_position['trade_context'].iloc[0]), list):
             trade_context = eval(existing_position['trade_context'].iloc[0])
-            trade_context.append(trade_df['trade_context'].iloc[0])
+            trade_context.append(trade_df['trade_context'].iloc[0])  
+        else:
+            trade_context = [existing_position['trade_context'].iloc[0], trade_df['trade_context'].iloc[0]]
         
         df_merged['trade_context'] = str(trade_context)
         df_merged['trade'] = trade_df['trade'].iloc[0]

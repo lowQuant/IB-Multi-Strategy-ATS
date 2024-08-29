@@ -82,14 +82,10 @@ class Strategy:
         trade.statusEvent += self.on_status_change
         self.ib.sleep(1)
 
-        contract = Stock('HFG', 'SMART', 'EUR')
-        #trade = self.trade_manager.trade(contract,1,order_type='LMT',limit=1,orderRef=self.strategy_symbol,urgency='Urgent',useRth=True)
-        trade = self.trade_manager.trade(contract,1,order_type='MKT',orderRef=self.strategy_symbol,algo = True,urgency="Urgent",useRth=True)
-
-        trade.fillEvent += self.on_fill
-        trade.statusEvent += self.on_status_change
-        self.ib.sleep(1)
-
+        # contract = Stock('HFG', 'SMART', 'EUR')
+        # #trade = self.trade_manager.trade(contract,1,order_type='LMT',limit=1,orderRef=self.strategy_symbol,urgency='Urgent',useRth=True)
+        # trade = self.trade_manager.trade(contract,-1,order_type='MKT',orderRef=self.strategy_symbol,algo = True,urgency="Urgent",useRth=True)
+        
         while True:
             self.ib.sleep(0.1)
 
