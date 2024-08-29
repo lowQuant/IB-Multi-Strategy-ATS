@@ -32,11 +32,18 @@ class PortfolioManager:
             portfolio_data.append(position)
         
         # Create the index from the 'timestamp' field in each position dictionary
-        dates = [pd.to_datetime(position['timestamp']) for position in portfolio_data]
+        dates = [pd.to_datetime(datetime.datetime.now().strftime('%Y-%m-%d %H:%M')) for _ in portfolio_data]
+        # dates = [pd.to_datetime(datetime.date.today().isoformat()) for _ in portfolio_data]
         df = pd.DataFrame(portfolio_data, index=dates)
 
         df = self.fx_cache.convert_marketValue_to_base(df, self.base)
         df['% of nav'] = df['marketValue_base'] / self.total_equity * 100
+        return df
+    
+    def load_portfolio(self):
+        df = self.portfolio_library.read(f"{self.account_id}",row_range=(-1,99)).data
+        df = df.reset_index(level=1)
+        df = df[df['deleted'] != True].copy()
         return df
 
     def save_portfolio(self, df_merged):

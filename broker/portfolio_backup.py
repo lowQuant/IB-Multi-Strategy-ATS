@@ -146,7 +146,7 @@ class PortfolioManager:
         row['marketValue'] = row['marketPrice'] * row['position']
         row['marketValue_base'] = row['marketValue'] / row['fx_rate']
         row['unrealizedPNL'] = (row['marketPrice'] - row['averageCost']) * row['position']
-        row['timestamp'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+        row['timestamp'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
         # You can update other fields as necessary (e.g., `% of nav`)
         row['% of nav'] = (row['marketValue_base'] / self.total_equity) * 100
@@ -204,7 +204,7 @@ class PortfolioManager:
 
         # Prepare the residual row data
         residual_row = {
-            'timestamp': datetime.datetime.now().strftime('%Y-%m-%d %H:%M'),
+            'timestamp': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'symbol': row['symbol'],
             'asset class': row['asset class'],
             'position': residual_position,
@@ -256,7 +256,7 @@ class PortfolioManager:
                 pnl = pnl *(-1) if item.position < 0 else pnl
                 asset_class = contractType
                     
-            position_dict = {'timestamp': datetime.datetime.now().strftime('%Y-%m-%d %H:%M'),
+            position_dict = {'timestamp': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                             'symbol': symbol,
                             'asset class': asset_class,
                             'position':item.position,
@@ -503,7 +503,7 @@ class PortfolioManager:
         value_base = value / fx_rate
         
         try:
-            trade_dict = {'timestamp': datetime.datetime.now().strftime('%Y-%m-%d %H:%M'),
+            trade_dict = {'timestamp': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'symbol': trade.contract.symbol,
             'asset class': trade.contract.secType,
             'position': qty,
@@ -557,7 +557,7 @@ class PortfolioManager:
         # Select the latest matching entry to update the other columns
         df_to_update = df[filter_condition][-1:].copy()
 
-        df_to_update['timestamp'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+        df_to_update['timestamp'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         df_to_update['marketValue_base'] = 0.0
         df_to_update['% of nav'] = 0.0
         df_to_update['pnl %'] = 0.0
@@ -577,7 +577,7 @@ class PortfolioManager:
         df_to_update['unrealizedPNL'] = 0.0
         df_to_update['realizedPNL'] = (trade_df['averageCost'].iloc[0] - df_to_update['averageCost'].iloc[0]) * abs(df_to_update['position'].iloc[0])
         df_to_update['deleted'] = True
-        df_to_update['delete_dt'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+        df_to_update['delete_dt'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
          # Append the updated closing entry to the DataFrame
         df = pd.concat([df, df_to_update], ignore_index=True)
@@ -602,7 +602,7 @@ class PortfolioManager:
         df_merged['averageCost'] = new_average_cost
 
         # Update the rest of the fields based on new position
-        df_merged['timestamp'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+        df_merged['timestamp'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         df_merged['marketPrice'] = trade_df['marketPrice'].iloc[0]
         df_merged['marketValue'] = df_merged['marketPrice'] * df_merged['position']
         df_merged['marketValue_base'] = df_merged['marketValue'] / trade_df['fx_rate'].iloc[0]
