@@ -32,7 +32,7 @@ class PortfolioManager:
             portfolio_data.append(position)
         
         # Create the index from the 'timestamp' field in each position dictionary
-        dates = [pd.to_datetime(datetime.date.today().isoformat()) for _ in portfolio_data]
+        dates = [pd.to_datetime(position['timestamp']) for position in portfolio_data]
         df = pd.DataFrame(portfolio_data, index=dates)
 
         df = self.fx_cache.convert_marketValue_to_base(df, self.base)
