@@ -17,8 +17,8 @@ class DataManager:
         """
         try:
             lib = self.arctic.get_library(library_name)
-            data = lib.read(symbol)
-            return data.data
+            data = lib.read(symbol).data
+            return data.sort_index(ascending=False)
         except Exception as e:
             print(f"Error retrieving data from Arctic: {e}")
             return None

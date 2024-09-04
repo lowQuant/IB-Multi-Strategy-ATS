@@ -1,4 +1,4 @@
-import platform
+import platform, subprocess, os
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 
@@ -31,19 +31,20 @@ class DatabaseWindow:
         self.master.geometry("1000x600")
 
         # Create tabs
-        self.tab_control = ttk.Notebook(self.master)
+        self.notebook = ttk.Notebook(self.master)
+        self.notebook.pack(fill=tk.BOTH, expand=True)
 
         # Data view tab
-        self.data_tab = ttk.Frame(self.tab_control)
-        self.tab_control.add(self.data_tab, text='Data View')
+        self.data_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.data_tab, text='Data View')
         self.setup_data_tab()
 
         # Task scheduler tab
-        self.task_tab = ttk.Frame(self.tab_control)
-        self.tab_control.add(self.task_tab, text='Task Scheduler')
-        self.setup_task_tab()
+        self.task_tab = ttk.Frame(self.notebook)  # Initialize the frame for the Task Scheduler tab
+        self.notebook.add(self.task_tab, text='Task Scheduler')
+        self.setup_task_scheduler_tab()
 
-        self.tab_control.pack(expand=1, fill="both")
+        self.notebook.pack(expand=1, fill="both")
 
     def setup_data_tab(self):
         connection_info = f"Connected to {str(self.data_manager.arctic).split('endpoint=')[1].split(',')[0]}" \
@@ -176,23 +177,76 @@ class DatabaseWindow:
             self.data_df = self.data_manager.get_data_from_arctic(library_name, symbol)
             show(self.data_df)
 
-    # SETUP TAB
-    def setup_task_tab(self):
-        label = ttk.Label(self.task_tab, text="Task Scheduler Area")
+    # SETUP TASK TAB
+    def setup_task_scheduler_tab(self):
+        """Set up the Task Scheduler tab."""
+
+        # Ensure self.task_scheduler_frame is initialized
+        self.task_scheduler_frame = ttk.Frame(self.task_tab)
+        self.task_scheduler_frame.pack(fill=tk.BOTH, expand=True)  # Ensure the frame is packed
+
+        # Create a paned window for vertical split
+        paned_window = ttk.PanedWindow(self.task_scheduler_frame, orient=tk.HORIZONTAL)
+        paned_window.pack(fill=tk.BOTH, expand=True)
+
+        # Left frame (Scheduled Tasks)
+        left_frame = ttk.Frame(paned_window, width=200)
+        paned_window.add(left_frame, weight=1)
+        self.setup_left_panel(left_frame)
+
+        # Right frame (Task Creation)
+        self.right_frame = ttk.Frame(paned_window, width=400)
+        paned_window.add(self.right_frame, weight=3)
+        self.setup_right_panel(self.right_frame)
+        
+    def setup_left_panel(self, parent):
+        """Setup the left panel in the Task Scheduler tab."""
+        header_label = ttk.Label(parent, text="Scheduled Tasks", font=("Arial", 16))
+        header_label.pack(pady=10)
+
+        # Listbox to display scheduled tasks (initially empty)
+        self.task_listbox = tk.Listbox(parent, height=20, width=40)
+        self.task_listbox.pack(pady=10)
+
+        # Initially show "No scheduled tasks"
+        self.task_listbox.insert(tk.END, "No scheduled tasks")
+        self.task_listbox.insert(tk.END, "Another no scheduled tasks")
+
+    def setup_right_panel(self, parent):
+        """Setup the right panel in the Task Scheduler tab."""
+        label = ttk.Label(parent, text="Add New Task", font=("Arial", 16))
         label.pack(pady=10)
 
-        # Text field for displaying the selected file path
-        self.file_path_var = tk.StringVar()
-        file_path_entry = ttk.Entry(self.task_tab, textvariable=self.file_path_var, width=50)
-        file_path_entry.pack(pady=5)
+        # Label to display the selected file path in abbreviated form
+        self.file_display_var = tk.StringVar()
+        file_display_label = ttk.Label(parent, textvariable=self.file_display_var, width=50, anchor="center")
+        file_display_label.pack(pady=5)
 
         # Button to open file dialog
-        select_file_button = ttk.Button(self.task_tab, text="Select Python File", command=self.open_file_dialog)
+        select_file_button = ttk.Button(parent, text="Select Python File", command=self.open_file_dialog)
         select_file_button.pack(pady=5)
 
-        # Button to schedule the task (this will be implemented in further steps)
-        schedule_button = ttk.Button(self.task_tab, text="Schedule Task", command=self.schedule_task)
+        # Input field for the time (e.g., 14:00 for 2:00 PM)
+        time_label = ttk.Label(parent, text="Time (HH:MM):")
+        time_label.pack(pady=5)
+        self.time_var = tk.StringVar()
+        time_entry = ttk.Entry(parent, textvariable=self.time_var, width=10)
+        time_entry.pack(pady=5)
+
+        # Dropdown for frequency (daily, weekly, etc.)
+        frequency_label = ttk.Label(parent, text="Frequency:")
+        frequency_label.pack(pady=5)
+        self.frequency_var = tk.StringVar(value="Daily")
+        frequency_combo = ttk.Combobox(parent, textvariable=self.frequency_var, 
+                                    values=["Daily", "Weekly", "Monthly"])
+        frequency_combo.pack(pady=5)
+
+        # Button to schedule the task
+        schedule_button = ttk.Button(parent, text="Schedule Task", command=self.schedule_task)
         schedule_button.pack(pady=5)
+
+        self.hint_label = ttk.Label(parent,text="Select a Python File to schedule a new task.")
+        self.hint_label.pack(pady=100)
 
     def open_file_dialog(self):
         """Open a file dialog for the user to select a Python file."""
@@ -201,19 +255,96 @@ class DatabaseWindow:
             filetypes=[("Python Files", "*.py"), ("All Files", "*.*")]
         )
         if file_path:
-            # Update the text field with the selected file path
-            self.file_path_var.set(file_path)
+            # Abbreviate the file path and display it
+            abbreviated_path = self.abbreviate_path(file_path)
+            self.file_display_var.set(abbreviated_path)
+            self.file_path = file_path  # Store the full path for later use
+            print(f"Selected file: {file_path}")
+            self.hint_label.config(text=f"Selected file: {abbreviated_path}")
+            self.master.update_idletasks()
+
+    def abbreviate_path(self, path, max_length=40):
+        """Abbreviate a file path to fit within a specified max length."""
+        if len(path) <= max_length:
+            return path
+        head, tail = os.path.split(path)
+        if len(tail) > max_length - 5:  # Leave room for "..."
+            return f".../{tail}"
+        return f"{head[:max_length//2]}.../{tail}"
 
     def schedule_task(self):
         """Schedule the selected Python file as a task."""
-        file_path = self.file_path_var.get()
+        file_path = getattr(self, 'file_path', None)  # Get the stored file path
+        time_of_day = self.time_var.get()
+        frequency = self.frequency_var.get()
+
         if not file_path:
             messagebox.showerror("Error", "Please select a Python file first.")
             return
 
-        # For now, just show a success message (scheduling logic will be implemented later)
-        messagebox.showinfo("Information", f"Task scheduled successfully for {file_path}!")
+        if not time_of_day:
+            messagebox.showerror("Error", "Please enter a time for the task.")
+            return
 
+        # Now, schedule the task based on the operating system
+        if self.operating_system == 'Windows':
+            self.schedule_task_windows(file_path, time_of_day, frequency)
+        elif self.operating_system == 'Linux' or self.operating_system == 'macOS':
+            self.schedule_task_unix(file_path, time_of_day, frequency)
+        else:
+            messagebox.showerror("Error", "Unsupported operating system.")
+
+    def schedule_task_windows(self, file_path, time_of_day, frequency):
+        """Schedule the task using Windows Task Scheduler."""
+        try:
+            # Construct the schtasks command
+            if frequency == "Daily":
+                schedule_type = "DAILY"
+            elif frequency == "Weekly":
+                schedule_type = "WEEKLY"
+            elif frequency == "Monthly":
+                schedule_type = "MONTHLY"
+            
+            # Build the command
+            command = f'schtasks /create /tn "Python Script Task" /tr "python {file_path}" /sc {schedule_type} /st {time_of_day}'
+            subprocess.run(command, check=True, shell=True)
+
+            # Update the task list and status
+            self.update_task_list(f"Task: {file_path} at {time_of_day} ({frequency})")
+            self.hint_label.config(f"Task scheduled successfully for {file_path}!")
+        except subprocess.CalledProcessError as e:
+            messagebox.showerror("Error", f"Failed to schedule task on Windows: {e}")
+
+    def schedule_task_unix(self, file_path, time_of_day, frequency):
+        """Schedule the task using cron (for Linux/macOS)."""
+        try:
+            # Parse the time
+            hour, minute = time_of_day.split(":")
+            cron_time = f"{minute} {hour} * * *"  # Default to daily
+
+            if frequency == "Weekly":
+                cron_time = f"{minute} {hour} * * 0"  # Sunday
+            elif frequency == "Monthly":
+                cron_time = f"{minute} {hour} 1 * *"  # 1st of every month
+
+            # Add the cron job
+            cron_command = f'(crontab -l; echo "{cron_time} python {file_path}") | crontab -'
+            subprocess.run(cron_command, check=True, shell=True)
+
+            # Update the task list and status
+            self.update_task_list(f"Task: {file_path} at {time_of_day} ({frequency})")
+            self.status_var.set(f"Task scheduled successfully for {file_path}!")
+        except subprocess.CalledProcessError as e:
+            messagebox.showerror("Error", f"Failed to schedule task on {self.operating_system}: {e}")
+
+    def update_task_list(self, task_description):
+        """Update the task list with a new task description."""
+        # Clear the 'No scheduled tasks' text if it exists
+        if self.task_listbox.get(0) == "No scheduled tasks":
+            self.task_listbox.delete(0)
+
+        # Add the new task to the list
+        self.task_listbox.insert(tk.END, task_description)
 
 def open_database_window(data_manager):
     root = tk.Tk()

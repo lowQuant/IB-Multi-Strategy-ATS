@@ -52,9 +52,9 @@ class StrategyManager:
     def handle_message(self, message):
         # Implement your logic to handle different message types
         try:
-            print(f"Received message: {message.type} [{message.strategy}]")  # Example message handling
-        except:
-            print("Exception occured in handling message from queue.")
+            print(f"Received message: Type: {message['type'].upper()} [{message['strategy']}]") #[{message}]")  # Example message handling
+        except Exception as e:
+            print(f"Exception occured in handling message from queue: {e}")
         if message['type'] == 'order':
             self.notify_order_placement(message['strategy'], message['trade'])
         elif message['type'] == 'fill':
@@ -71,7 +71,6 @@ class StrategyManager:
 
         if trade.isDone():
             add_log(f"{trade.fills[0].execution.side} {trade.orderStatus.filled} {trade.contract.symbol}@{trade.orderStatus.avgFillPrice} [{trade.order.orderRef}]")
-            print(f"Processing {trade.contract.symbol} for strategy [{trade.order.orderRef}]")
             self.portfolio_manager.process_new_trade(strategy, trade)
         else:
             add_log(f"{order_type} Order placed: {action} {quantity} {symbol} [{strategy}]")
@@ -134,6 +133,10 @@ class StrategyManager:
         
     def start_all(self):
         self.load_strategies()
+
+        # Update the Portfolio before going live with the strategies
+        self.portfolio_manager.match_ib_positions_with_arcticdb()
+        
         for strategy_module in self.strategies:
             if hasattr(strategy_module, 'manage_strategy'):
                 self.clientId += 1
