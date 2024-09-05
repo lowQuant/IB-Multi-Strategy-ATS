@@ -286,13 +286,19 @@ class DatabaseWindow:
             messagebox.showerror("Error", "Please enter a time for the task.")
             return
 
-        # Now, schedule the task based on the operating system
-        if self.operating_system == 'Windows':
-            self.schedule_task_windows(file_path, time_of_day, frequency)
-        elif self.operating_system == 'Linux' or self.operating_system == 'macOS':
-            self.schedule_task_unix(file_path, time_of_day, frequency)
-        else:
-            messagebox.showerror("Error", "Unsupported operating system.")
+        if not frequency:
+            messagebox.showerror("Error", "Please enter a frequency for the task.")
+            return
+        
+        file = file_path.split("/")[-1]
+        self.data_manager.save_new_job(file,time_of_day,frequency,self.operating_system)
+        # # Now, schedule the task based on the operating system
+        # if self.operating_system == 'Windows':
+        #     self.schedule_task_windows(file_path, time_of_day, frequency)
+        # elif self.operating_system == 'Linux' or self.operating_system == 'macOS':
+        #     self.schedule_task_unix(file_path, time_of_day, frequency)
+        # else:
+        #     messagebox.showerror("Error", "Unsupported operating system.")
 
     def schedule_task_windows(self, file_path, time_of_day, frequency):
         """Schedule the task using Windows Task Scheduler."""

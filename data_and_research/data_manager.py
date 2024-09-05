@@ -9,7 +9,13 @@ from data_and_research import ac, initialize_db
 class DataManager:
     def __init__(self, ib_client: IB,arctic = None):
         self.ib = ib_client
-        self.arctic = arctic if arctic else ac 
+        self.arctic = arctic if arctic else ac
+
+        
+    def save_new_job(self,file,time,frequency,os):
+        # Creating library 'jobs' where scheduled tasks will be stored
+        self.jobs_lib = self.arctic.get_library('jobs', create_if_missing=True)
+
 
     def get_data_from_arctic(self, library_name, symbol):
         """
