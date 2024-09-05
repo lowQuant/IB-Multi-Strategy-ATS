@@ -1,5 +1,5 @@
 import pandas as pd
-import time, os, threading, subprocess, schedule
+import time, os, threading, subprocess, schedule, socket
 from ib_async import *
 from gui.log import add_log
 import datetime
@@ -10,13 +10,29 @@ class DataManager:
     def __init__(self, ib_client: IB,arctic = None):
         self.ib = ib_client
         self.arctic = arctic if arctic else ac
-
+        self.account_id = self.ib.managedAccounts()[0]
         
-    def save_new_job(self,file,time,frequency,os):
-        # Creating library 'jobs' where scheduled tasks will be stored
+    def save_new_job(self, filename, cron_notation, operating_system):
+        '''Function to save a scheduled task/job to ArcticDB'''
+        jobs_df = pd.DataFrame([{"filename": filename,"cron_notation": cron_notation,
+              "operating_system": operating_system, "hostname": socket.gethostname()}])
+        
         self.jobs_lib = self.arctic.get_library('jobs', create_if_missing=True)
 
-
+        if 'jobs' in self.jobs_lib.list_symbols():
+            self.jobs_lib.append('jobs',jobs_df)
+        else:
+            self.jobs_lib.write('jobs',jobs_df)
+        
+    def get_saved_jobs(self):
+        # Retrieve saved jobs for the account_id
+        try:
+            self.jobs_lib = self.arctic.get_library('jobs', create_if_missing=True)
+            jobs_df = self.jobs_lib.read("jobs").data
+            return jobs_df
+        except Exception:  # Handle case where there are no saved jobs
+            return pd.DataFrame(columns=["filename", "cron_notation", "operating_system","hostname"])
+        
     def get_data_from_arctic(self, library_name, symbol):
         """
         Retrieve data for a given symbol from the specified Arctic library.

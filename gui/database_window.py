@@ -1,4 +1,4 @@
-import platform, subprocess, os
+import platform, subprocess, os, re
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 
@@ -190,13 +190,13 @@ class DatabaseWindow:
         paned_window.pack(fill=tk.BOTH, expand=True)
 
         # Left frame (Scheduled Tasks)
-        left_frame = ttk.Frame(paned_window, width=200)
-        paned_window.add(left_frame, weight=1)
+        left_frame = ttk.Frame(paned_window, width=500)
+        paned_window.add(left_frame, weight=3)
         self.setup_left_panel(left_frame)
 
         # Right frame (Task Creation)
-        self.right_frame = ttk.Frame(paned_window, width=400)
-        paned_window.add(self.right_frame, weight=3)
+        self.right_frame = ttk.Frame(paned_window, width=300)
+        paned_window.add(self.right_frame, weight=1)
         self.setup_right_panel(self.right_frame)
         
     def setup_left_panel(self, parent):
@@ -204,13 +204,25 @@ class DatabaseWindow:
         header_label = ttk.Label(parent, text="Scheduled Tasks", font=("Arial", 16))
         header_label.pack(pady=10)
 
-        # Listbox to display scheduled tasks (initially empty)
-        self.task_listbox = tk.Listbox(parent, height=20, width=40)
-        self.task_listbox.pack(pady=10)
+       # Create a frame to hold the Listbox and the Scrollbar
+        listbox_frame = tk.Frame(parent)
+        listbox_frame.pack(pady=10, fill=tk.BOTH, expand=True)
 
-        # Initially show "No scheduled tasks"
-        self.task_listbox.insert(tk.END, "No scheduled tasks")
-        self.task_listbox.insert(tk.END, "Another no scheduled tasks")
+        # Listbox to display scheduled tasks (initially empty)
+        self.task_listbox = tk.Listbox(listbox_frame, height=20, width=40)
+        self.task_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # Scrollbar for the Listbox
+        task_scrollbar = tk.Scrollbar(listbox_frame)
+        task_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Link the Scrollbar and the Listbox
+        self.task_listbox.config(yscrollcommand=task_scrollbar.set)
+        task_scrollbar.config(command=self.task_listbox.yview)
+
+        # Populate the Listbox with tasks
+        self.refresh_task_list()
+        
 
     def setup_right_panel(self, parent):
         """Setup the right panel in the Task Scheduler tab."""
@@ -230,8 +242,8 @@ class DatabaseWindow:
         time_label = ttk.Label(parent, text="Time (HH:MM):")
         time_label.pack(pady=5)
         self.time_var = tk.StringVar()
-        time_entry = ttk.Entry(parent, textvariable=self.time_var, width=10)
-        time_entry.pack(pady=5)
+        self.time_entry = ttk.Entry(parent, textvariable=self.time_var, width=10)
+        self.time_entry.pack(pady=5)
 
         # Dropdown for frequency (daily, weekly, etc.)
         frequency_label = ttk.Label(parent, text="Frequency:")
@@ -274,31 +286,66 @@ class DatabaseWindow:
 
     def schedule_task(self):
         """Schedule the selected Python file as a task."""
+        # self.time_entry.update_idletasks()  # Force GUI update
+
         file_path = getattr(self, 'file_path', None)  # Get the stored file path
-        time_of_day = self.time_var.get()
+        time_of_day = self.time_entry.get().strip()
         frequency = self.frequency_var.get()
 
         if not file_path:
             messagebox.showerror("Error", "Please select a Python file first.")
             return
 
-        if not time_of_day:
-            messagebox.showerror("Error", "Please enter a time for the task.")
+        # Validate time format (HH:MM)
+        if not self.validate_time_format(time_of_day):
+            messagebox.showerror("Error", "Please enter a valid time in HH:MM format.")
             return
 
         if not frequency:
             messagebox.showerror("Error", "Please enter a frequency for the task.")
             return
         
+        cron_notation = self.convert_to_cron(time_of_day, frequency)
+
         file = file_path.split("/")[-1]
-        self.data_manager.save_new_job(file,time_of_day,frequency,self.operating_system)
-        # # Now, schedule the task based on the operating system
-        # if self.operating_system == 'Windows':
-        #     self.schedule_task_windows(file_path, time_of_day, frequency)
-        # elif self.operating_system == 'Linux' or self.operating_system == 'macOS':
-        #     self.schedule_task_unix(file_path, time_of_day, frequency)
-        # else:
-        #     messagebox.showerror("Error", "Unsupported operating system.")
+        self.data_manager.save_new_job(file,cron_notation,self.operating_system)
+        print(f"Successfully saved job for {file}")
+
+        # Update the task list
+        self.refresh_task_list()
+
+        # Now, schedule the task based on the operating system
+        if self.operating_system == 'Windows':
+            self.schedule_task_windows(file_path, time_of_day, frequency)
+        elif self.operating_system == 'Linux' or self.operating_system == 'macOS':
+            self.schedule_task_unix(file_path, time_of_day, frequency)
+        else:
+            messagebox.showerror("Error", "Unsupported operating system.")
+
+
+    def validate_time_format(self, time_str):
+        """Validate that the time string is in HH:MM format."""
+        time_pattern = re.compile(r'^\d{2}:\d{2}$')
+        if not time_pattern.match(time_str):
+            return False
+
+        hours, minutes = time_str.split(":")
+        if not (0 <= int(hours) < 24 and 0 <= int(minutes) < 60):
+            return False
+
+        return True
+
+    def convert_to_cron(self, time_of_day, frequency):
+        """Convert time and frequency to cron notation."""
+        hour, minute = time_of_day.split(":")
+        cron_time = f"{minute} {hour} * * *"  # Default to daily
+
+        if frequency == "Weekly":
+            cron_time = f"{minute} {hour} * * 0"  # Sunday
+        elif frequency == "Monthly":
+            cron_time = f"{minute} {hour} 1 * *"  # 1st of every month
+        
+        return cron_time
 
     def schedule_task_windows(self, file_path, time_of_day, frequency):
         """Schedule the task using Windows Task Scheduler."""
@@ -351,6 +398,22 @@ class DatabaseWindow:
 
         # Add the new task to the list
         self.task_listbox.insert(tk.END, task_description)
+    
+    def refresh_task_list(self):
+        """Retrieve saved jobs from ArcticDB and update the left pane."""
+        jobs_df = self.data_manager.get_saved_jobs()
+
+        # Clear the current task list in the GUI
+        self.task_listbox.delete(0, tk.END)
+
+        # Populate the task list with saved jobs
+        if jobs_df.empty:
+            self.task_listbox.insert(tk.END, "No scheduled tasks")
+        else:
+            for _, row in jobs_df.iterrows():
+                task_description = f"{row['filename']}   {row['cron_notation']}   saved on {row['operating_system']}"
+                self.task_listbox.insert(tk.END, task_description)
+
 
 def open_database_window(data_manager):
     root = tk.Tk()
