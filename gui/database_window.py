@@ -1,6 +1,6 @@
-import platform, subprocess, os, re
+import platform, subprocess, os, re, sys
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from tkinter import ttk, messagebox, filedialog, StringVar, Frame, Label, Text, Entry, Button, Checkbutton, IntVar, BooleanVar
 
 class DatabaseWindow:
     def __init__(self, master, data_manager):
@@ -226,39 +226,79 @@ class DatabaseWindow:
 
     def setup_right_panel(self, parent):
         """Setup the right panel in the Task Scheduler tab."""
-        label = ttk.Label(parent, text="Add New Task", font=("Arial", 16))
-        label.pack(pady=10)
+        # Title Label
+        ttk.Label(parent, text="Add New Task", font=("Arial", 16)).grid(row=0, column=1, columnspan=2, sticky='w', pady=10)
+        
+        ttk.Label(parent,text="""Choose a .py-file, time and frequency to schedule a task.""").grid(row=1,column=0,columnspan=3, pady=10)
+        ttk.Button(parent, text="Select Python File", command=self.open_file_dialog).grid(row=2, column=0,columnspan=2, sticky='w', pady=15)
+        
+        # # Time and Frequency labels in the same row
+        ttk.Label(parent, text="Time (HH:MM):").grid(row=3, column=0, sticky='w', padx=10, pady=5)
+        ttk.Label(parent, text="Frequency:").grid(row=3, column=1, sticky='w', padx=10, pady=5)
+        ttk.Label(parent,text="Execution Type").grid(row=3, column=2, sticky='w', padx=10, pady=5)
 
-        # Label to display the selected file path in abbreviated form
-        self.file_display_var = tk.StringVar()
-        file_display_label = ttk.Label(parent, textvariable=self.file_display_var, width=50, anchor="center")
-        file_display_label.pack(pady=5)
-
-        # Button to open file dialog
-        select_file_button = ttk.Button(parent, text="Select Python File", command=self.open_file_dialog)
-        select_file_button.pack(pady=5)
-
-        # Input field for the time (e.g., 14:00 for 2:00 PM)
-        time_label = ttk.Label(parent, text="Time (HH:MM):")
-        time_label.pack(pady=5)
-        self.time_var = tk.StringVar()
+        # Row 4: Time, Frequency and DataManager input fields
+        self.time_var = StringVar()
         self.time_entry = ttk.Entry(parent, textvariable=self.time_var, width=10)
-        self.time_entry.pack(pady=5)
+        self.time_entry.grid(row=4, column=0, sticky='w', padx=10, pady=5)
+        
+        self.frequency_var = StringVar(value="Daily")
+        self.frequency_combo = ttk.Combobox(parent, textvariable=self.frequency_var, values=["Daily", "Weekly", "Monthly"], width=10)
+        self.frequency_combo.grid(row=4, column=1, sticky='w', padx=10, pady=5)
 
-        # Dropdown for frequency (daily, weekly, etc.)
-        frequency_label = ttk.Label(parent, text="Frequency:")
-        frequency_label.pack(pady=5)
-        self.frequency_var = tk.StringVar(value="Daily")
-        frequency_combo = ttk.Combobox(parent, textvariable=self.frequency_var, 
-                                    values=["Daily", "Weekly", "Monthly"])
-        frequency_combo.pack(pady=5)
+        self.execution_type_var = StringVar(value='Standalone')
+        self.execution_type_combo = ttk.Combobox(parent, textvariable=self.execution_type_var, values=["Standalone", "Centralized"], width=10)
+        self.execution_type_combo.grid(row=4, column=2, sticky='w', padx=10, pady=5)
+        self.execution_type_combo.bind("<<ComboboxSelected>>", lambda event: self.toggle_data_manager_options())
 
-        # Button to schedule the task
-        schedule_button = ttk.Button(parent, text="Schedule Task", command=self.schedule_task)
-        schedule_button.pack(pady=5)
+        # Row 5 Label
+        ttk.Label(parent, text="Script must return a pd.DataFrame for a centralized execution").grid(row=5,column=0,columnspan=3,sticky='w',padx=10)
+        
+        # Row 6 - Labels
+        ttk.Label(parent,text='Library').grid(row=6, column=0,sticky='w', padx=10, pady=25)
+        ttk.Label(parent,text='Symbol').grid(row=6, column=1,sticky='w', padx=10, pady=25)
+        ttk.Label(parent,text='How to save?').grid(row=6, column=2,sticky='w', padx=10, pady=25)
 
-        self.hint_label = ttk.Label(parent,text="Select a Python File to schedule a new task.")
-        self.hint_label.pack(pady=100)
+        # Row 7
+        self.library_entry = ttk.Entry(parent, width=10)
+        self.symbol_entry = ttk.Entry(parent, width=10)
+        self.how_to_save_combo = ttk.Combobox(parent, values=["Append", "Replace"], width=10)
+
+        # Initially disable the DataManager options
+        self.library_entry.config(state='disabled')
+        self.symbol_entry.config(state='disabled')
+        self.how_to_save_combo.config(state='disabled')
+
+        self.library_entry.grid(row=7, column=0, padx=10)
+        self.symbol_entry.grid(row=7, column=1, padx=10)
+        self.how_to_save_combo.grid(row=7, column=2, padx=10)
+
+        # Row 8: Button to schedule the task, Checkbox for log files
+        schedule_button = ttk.Button(parent, text="Schedule Task",width=25, command=self.schedule_task).grid(row=8,column=0,columnspan=2,pady=50)
+
+        def update_log_flag():
+            # Update need_log_file based on the checkbox state
+            self.need_log_file = True if not self.need_log_file else False
+            print(f"Variable self.need_log_file set to {self.need_log_file}")
+
+        self.log_var = IntVar()
+        self.log_file_button = ttk.Checkbutton(parent, text="Need logs?", variable=self.log_var, command=update_log_flag, offvalue=0)
+        self.log_file_button.grid(row=8, column=2, pady=50)
+        self.log_file_button.state(["!alternate"])
+        self.log_var.set(0)  # Unselect the checkbox
+        self.need_log_file = bool(self.log_var.get())
+
+    def toggle_data_manager_options(self,*args):
+        print("toggle_data_manager_options called")
+        """Enable or disable DataManager options based on the execution type."""
+        if self.execution_type_combo.get() == "Centralized":
+            self.library_entry.config(state='normal')
+            self.symbol_entry.config(state='normal')
+            self.how_to_save_combo.config(state='normal')
+        else:
+            self.library_entry.config(state='disabled')
+            self.symbol_entry.config(state='disabled')
+            self.how_to_save_combo.config(state='disabled')
 
     def open_file_dialog(self):
         """Open a file dialog for the user to select a Python file."""
@@ -269,10 +309,9 @@ class DatabaseWindow:
         if file_path:
             # Abbreviate the file path and display it
             abbreviated_path = self.abbreviate_path(file_path)
-            self.file_display_var.set(abbreviated_path)
+            # self.file_display_var.set(abbreviated_path)
             self.file_path = file_path  # Store the full path for later use
             print(f"Selected file: {file_path}")
-            self.hint_label.config(text=f"Selected file: {abbreviated_path}")
             self.master.update_idletasks()
 
     def abbreviate_path(self, path, max_length=40):
@@ -286,11 +325,10 @@ class DatabaseWindow:
 
     def schedule_task(self):
         """Schedule the selected Python file as a task."""
-        # self.time_entry.update_idletasks()  # Force GUI update
-
-        file_path = getattr(self, 'file_path', None)  # Get the stored file path
+        file_path = getattr(self, 'file_path', None)
         time_of_day = self.time_entry.get().strip()
         frequency = self.frequency_var.get()
+        execution_type = self.execution_type_combo.get()
 
         if not file_path:
             messagebox.showerror("Error", "Please select a Python file first.")
@@ -304,24 +342,33 @@ class DatabaseWindow:
         if not frequency:
             messagebox.showerror("Error", "Please enter a frequency for the task.")
             return
-        
-        cron_notation = self.convert_to_cron(time_of_day, frequency)
 
-        file = file_path.split("/")[-1]
-        self.data_manager.save_new_job(file,cron_notation,self.operating_system)
-        print(f"Successfully saved job for {file}")
+        if execution_type == "Standalone":
+            if self.operating_system == 'Windows':
+                self.schedule_task_windows(file_path, time_of_day, frequency)
+            elif self.operating_system in ['Linux', 'macOS']:
+                self.schedule_task_unix(file_path, time_of_day, frequency, execution_type)
+            else:
+                messagebox.showerror("Error", "Unsupported operating system.")
 
-        # Update the task list
-        self.refresh_task_list()
+        elif execution_type == "Centralized":
+            # Retrieve values from the entry forms
+            library = self.library_entry.get().strip()
+            symbol = self.symbol_entry.get().strip()
+            save_mode = self.how_to_save_combo.get()
 
-        # Now, schedule the task based on the operating system
-        if self.operating_system == 'Windows':
-            self.schedule_task_windows(file_path, time_of_day, frequency)
-        elif self.operating_system == 'Linux' or self.operating_system == 'macOS':
-            self.schedule_task_unix(file_path, time_of_day, frequency)
+            if not library or not symbol or save_mode not in ["Append", "Replace"]:
+                messagebox.showerror("Error", "Please provide valid DataManager options (Library, Symbol, Save Mode).")
+                return
+
+            if self.operating_system == 'Windows':
+                self.schedule_task_windows(file_path, time_of_day, frequency, execution_type, library, symbol, save_mode)
+            elif self.operating_system in ['Linux', 'macOS']:
+                self.schedule_task_unix(file_path, time_of_day, frequency, execution_type, library, symbol, save_mode)
+            else:
+                messagebox.showerror("Error", "Unsupported operating system.")
         else:
-            messagebox.showerror("Error", "Unsupported operating system.")
-
+            messagebox.showerror("Error", "Invalid execution type selected.")      
 
     def validate_time_format(self, time_str):
         """Validate that the time string is in HH:MM format."""
@@ -364,32 +411,51 @@ class DatabaseWindow:
 
             # Update the task list and status
             self.update_task_list(f"Task: {file_path} at {time_of_day} ({frequency})")
-            self.hint_label.config(f"Task scheduled successfully for {file_path}!")
         except subprocess.CalledProcessError as e:
             messagebox.showerror("Error", f"Failed to schedule task on Windows: {e}")
 
-    def schedule_task_unix(self, file_path, time_of_day, frequency):
-        """Schedule the task using cron (for Linux/macOS)."""
+    def schedule_task_unix(self, file_path, time_of_day, frequency, execution_type, library="", symbol="", save_mode=""):
+        """Schedule the task using cron (for Linux/macOS) with the correct Python environment."""
         try:
-            # Parse the time
-            hour, minute = time_of_day.split(":")
-            cron_time = f"{minute} {hour} * * *"  # Default to daily
+            # Get the full path to the current Python interpreter
+            python_executable = sys.executable
+            
+            cron_time = self.convert_to_cron(time_of_day,frequency)
 
-            if frequency == "Weekly":
-                cron_time = f"{minute} {hour} * * 0"  # Sunday
-            elif frequency == "Monthly":
-                cron_time = f"{minute} {hour} 1 * *"  # 1st of every month
+            cwd = os.getcwd()
+            base_dir = cwd.split('IB-Multi-Strategy-ATS')[0]
+            repo_dir = os.path.join(base_dir,"IB-Multi-Strategy-ATS")
+            data_manager_path = os.path.join(base_dir, "IB-Multi-Strategy-ATS", "data_and_research", "data_manager.py")
+            print("cwd is",cwd)
 
-            # Add the cron job
-            cron_command = f'(crontab -l; echo "{cron_time} python {file_path}") | crontab -'
+            file = file_path.split("/")[-1]
+
+            # Derive log file path: same directory, base filename with .txt extension
+            base_name = os.path.splitext(file_path)[0]
+            log_file = f"{base_name}.txt"
+            log_file_path = os.path.join(repo_dir,"data_and_research","logs","jobs",file.split(".")[0]+".txt")
+            print(log_file_path)
+
+            # Add the cron job with the full path to Python interpreter and logging
+            if execution_type == 'Standalone':
+                # cron_command = f'(crontab -l; echo "{cron_time} cd {repo_dir} && {python_executable} {file_path} >> {log_file} 2>&1") | crontab -'
+                cron_command = f'(crontab -l; echo "{cron_time} cd {repo_dir} && {python_executable} {file_path} {">> "+log_file_path+" 2>&1" if self.need_log_file else ""}") | crontab -'
+                self.data_manager.save_new_job(file, cron_time, cron_command, self.operating_system, execution_type )
+                print(f"Successfully saved standalone job for {file_path}")
+            else:
+                append = True if save_mode == 'Append' else False
+                
+                # Construct the dynamic bash line
+                # cron_command = f'(crontab -l; echo "{cron_time} cd {repo_dir} && {python_executable} {data_manager_path} --store-data --script \"{file_path}\" --library \"{library}\" --symbol \"{symbol}\" {"--append" if append else ""} >> {log_file} 2>&1") | crontab -'
+                cron_command = f'(crontab -l; echo "{cron_time} cd {repo_dir} && {python_executable} {data_manager_path} --store-data --script \"{file_path}\" --library \"{library}\" --symbol \"{symbol}\" {"--append" if append else ""} {f" >> {log_file_path} 2>&1" if self.need_log_file else ""}") | crontab -'
+
+                self.data_manager.save_new_job(file, cron_time, cron_command, self.operating_system, execution_type, library, symbol, save_mode)
+                print(f"Successfully saved job.", cron_command)
+
             subprocess.run(cron_command, check=True, shell=True)
-
-            # Update the task list and status
-            self.update_task_list(f"Task: {file_path} at {time_of_day} ({frequency})")
-            self.status_var.set(f"Task scheduled successfully for {file_path}!")
         except subprocess.CalledProcessError as e:
             messagebox.showerror("Error", f"Failed to schedule task on {self.operating_system}: {e}")
-
+            
     def update_task_list(self, task_description):
         """Update the task list with a new task description."""
         # Clear the 'No scheduled tasks' text if it exists
@@ -413,7 +479,6 @@ class DatabaseWindow:
             for _, row in jobs_df.iterrows():
                 task_description = f"{row['filename']}   {row['cron_notation']}   saved on {row['operating_system']}"
                 self.task_listbox.insert(tk.END, task_description)
-
 
 def open_database_window(data_manager):
     root = tk.Tk()
