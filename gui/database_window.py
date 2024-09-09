@@ -1,6 +1,7 @@
-import platform, subprocess, os, re, sys
+import platform, subprocess, os, re, sys, socket
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog, StringVar, Frame, Label, Text, Entry, Button, Checkbutton, IntVar, BooleanVar
+from tkinter import ttk, messagebox, filedialog, StringVar, Frame, Label, Text, Entry, Button, Checkbutton, IntVar, Menu
+from crontab import CronTab
 
 class DatabaseWindow:
     def __init__(self, master, data_manager):
@@ -164,7 +165,7 @@ class DatabaseWindow:
             self.update_symbol_options()  # Refresh symbols after deletion
 
     def view_in_pandasgui(self):
-        from pandasgui import show
+        from pandasgui import show # type: ignore
         library_name = self.library_combo.get()
         symbol = self.symbol_combo.get()
         
@@ -222,16 +223,132 @@ class DatabaseWindow:
 
         # Populate the Listbox with tasks
         self.refresh_task_list()
-        
 
+        # Populate the Listbox with tasks
+        self.refresh_task_list()
+
+        # Bind right-click to the Listbox
+        self.task_listbox.bind("<Button-3>", self.show_context_menu)
+        self.task_listbox.bind("<Button-2>", self.show_context_menu)
+
+        # Create the context menu
+        self.context_menu = Menu(self.task_listbox, tearoff=0)
+        self.context_menu.add_command(label="Copy Crontab", command=self.copy_crontab)
+        self.context_menu.add_command(label="Delete Crontab", command=self.delete_selected_task)
+    
+    def update_task_list(self, task_description):
+        """Update the task list with a new task description."""
+        # Clear the 'No scheduled tasks' text if it exists
+        if self.task_listbox.get(0) == "No scheduled tasks":
+            self.task_listbox.delete(0)
+
+        # Add the new task to the list
+        self.task_listbox.insert(tk.END, task_description)
+        
+    def refresh_task_list(self):
+        """Retrieve saved jobs from ArcticDB and update the left pane."""
+        jobs_df = self.data_manager.get_saved_jobs()
+
+        # Clear the current task list in the GUI
+        self.task_listbox.delete(0, tk.END)
+
+        # Populate the task list with saved jobs
+        if jobs_df.empty:
+            self.task_listbox.insert(tk.END, "No scheduled tasks")
+        else:
+            for _, row in jobs_df.iterrows():
+                if row['operating_system']=='macOS':
+                    task_description = f"{row['hostname']} saved: {row['cron_command']}"
+                else:
+                    task_description = f"{row['hostname']} saved: {row['cron_notation']} {row['filename']}"
+                self.task_listbox.insert(tk.END, task_description)
+                    
+    def show_context_menu(self, event):
+        """Show the context menu on right-click."""
+        # Get the index of the clicked row
+        try:
+            self.task_listbox.selection_clear(0, tk.END)
+            self.task_listbox.selection_set(self.task_listbox.nearest(event.y))
+            self.context_menu.post(event.x_root, event.y_root)
+        except Exception as e:
+            print("Error showing context menu:", e)
+    
+    def copy_crontab(self):
+        selected_index = self.task_listbox.curselection()
+        if selected_index:
+            selected_task = self.task_listbox.get(selected_index)
+            task = selected_task.split('saved: ')[-1]
+            
+            # Copy task to clipboard
+            self.task_listbox.clipboard_clear()
+            self.task_listbox.clipboard_append(task)
+
+    def delete_selected_task(self):
+        """Delete the selected task."""
+        try:
+            # Get the currently selected task
+            selected_index = self.task_listbox.curselection()
+            if selected_index:
+                selected_index = selected_index[0]
+                
+                selected_task = self.task_listbox.get(selected_index)
+                task = selected_task.split('saved: ')[-1]
+
+                # Remove the task from the Listbox
+                self.task_listbox.delete(selected_index)
+
+                # Remove the task from Crontab if it actually is a Cronjob
+                if '(crontab -l;' in task:
+                    self.delete_job_from_crontab(task)
+
+                # TODO: Same for Windows
+
+                # Remove Job from ArcticDB
+                jobs_lib = self.arctic.get_library('jobs')
+                df = jobs_lib.read('jobs').data
+                
+                if selected_index < len(df):
+                    df = df.drop(df.index[selected_index]).reset_index(drop=True)
+                    jobs_lib.write('jobs', df)
+                
+                print(f"Deleted task: {selected_task}")
+
+        except Exception as e:
+            print("Error deleting task:", e)
+
+    def delete_job_from_crontab(self, job_command):
+        cron = CronTab(user=True)  # Use the current user’s crontab
+        job_command = job_command.split('echo "')[-1].split('")')[0].replace('"','')
+        
+        # Find the job by command and remove it
+        for job in cron:
+            print(job)
+            if job.command == job_command:
+                cron.remove(job)
+                cron.write()  # Save changes to the crontab
+                print(f"Deleted job: {job_command}")
+                return
+        else:
+            # maybe job was not found, because of a difference in how cron time is displayed
+            split_command = job_command.split('cd ')[-1]
+            for job in cron:
+                if split_command in job.command:
+                    cron.remove(job)
+                    cron.write()
+                    print(f"Deleted job: {job_command}")
+                    return
+        print("Job not found.")
+    
     def setup_right_panel(self, parent):
         """Setup the right panel in the Task Scheduler tab."""
         # Title Label
         ttk.Label(parent, text="Add New Task", font=("Arial", 16)).grid(row=0, column=1, columnspan=2, sticky='w', pady=10)
         
         ttk.Label(parent,text="""Choose a .py-file, time and frequency to schedule a task.""").grid(row=1,column=0,columnspan=3, pady=10)
-        ttk.Button(parent, text="Select Python File", command=self.open_file_dialog).grid(row=2, column=0,columnspan=2, sticky='w', pady=15)
-        
+        ttk.Button(parent, text="Select Python File", command=self.open_file_dialog).grid(row=2, column=0,columnspan=1, sticky='w', pady=15)
+        self.file_label = ttk.Label(parent, text="No File selected.")
+        self.file_label.grid(row=2,column=1,columnspan=2, sticky='w',padx=10,pady=15)
+
         # # Time and Frequency labels in the same row
         ttk.Label(parent, text="Time (HH:MM):").grid(row=3, column=0, sticky='w', padx=10, pady=5)
         ttk.Label(parent, text="Frequency:").grid(row=3, column=1, sticky='w', padx=10, pady=5)
@@ -312,6 +429,7 @@ class DatabaseWindow:
             # self.file_display_var.set(abbreviated_path)
             self.file_path = file_path  # Store the full path for later use
             print(f"Selected file: {file_path}")
+            self.file_label.config(text=f"Selected: {file_path.split('/')[-1]}")
             self.master.update_idletasks()
 
     def abbreviate_path(self, path, max_length=40):
@@ -453,33 +571,10 @@ class DatabaseWindow:
                 print(f"Successfully saved job.", cron_command)
 
             subprocess.run(cron_command, check=True, shell=True)
+            self.update_task_list(f"{socket.gethostname()} saved: {cron_command}")
         except subprocess.CalledProcessError as e:
             messagebox.showerror("Error", f"Failed to schedule task on {self.operating_system}: {e}")
             
-    def update_task_list(self, task_description):
-        """Update the task list with a new task description."""
-        # Clear the 'No scheduled tasks' text if it exists
-        if self.task_listbox.get(0) == "No scheduled tasks":
-            self.task_listbox.delete(0)
-
-        # Add the new task to the list
-        self.task_listbox.insert(tk.END, task_description)
-    
-    def refresh_task_list(self):
-        """Retrieve saved jobs from ArcticDB and update the left pane."""
-        jobs_df = self.data_manager.get_saved_jobs()
-
-        # Clear the current task list in the GUI
-        self.task_listbox.delete(0, tk.END)
-
-        # Populate the task list with saved jobs
-        if jobs_df.empty:
-            self.task_listbox.insert(tk.END, "No scheduled tasks")
-        else:
-            for _, row in jobs_df.iterrows():
-                task_description = f"{row['filename']}   {row['cron_notation']}   saved on {row['operating_system']}"
-                self.task_listbox.insert(tk.END, task_description)
-
 def open_database_window(data_manager):
     root = tk.Tk()
     app = DatabaseWindow(root, data_manager)

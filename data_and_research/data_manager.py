@@ -68,7 +68,10 @@ class DataManager:
         self.jobs_lib = self.arctic.get_library('jobs', create_if_missing=True)
 
         if 'jobs' in self.jobs_lib.list_symbols():
-            self.jobs_lib.append('jobs',jobs_df)
+            if not self.jobs_lib.read('jobs').data.empty:
+                self.jobs_lib.append('jobs',jobs_df)
+            else:
+                self.jobs_lib.write('jobs',jobs_df)
         else:
             self.jobs_lib.write('jobs',jobs_df)
         
