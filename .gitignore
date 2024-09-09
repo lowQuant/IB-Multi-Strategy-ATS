@@ -406,4 +406,7 @@ venv/
 # ignore my job logs
 logs/jobs/
 
+# ignoring DS Store file
+.DS_Store
+
 
