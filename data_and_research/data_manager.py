@@ -4,10 +4,7 @@ from ib_async import *
 import datetime
 import importlib.util, argparse
 import yfinance as yf
-try:
-    from data_and_research import ac, initialize_db
-except:
-    from utils import ac, initialize_db
+from data_and_research import ac
 
 class DataManager:
     def __init__(self, ib_client: IB,arctic = None):
