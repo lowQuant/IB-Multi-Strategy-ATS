@@ -1,4 +1,4 @@
-from tkinter import Toplevel, ttk, Frame, Label, Text, Entry, Button, Checkbutton, IntVar, messagebox, Toplevel, StringVar
+from tkinter import Toplevel, ttk, Frame, Label, Text, Entry, Button, Checkbutton, IntVar, messagebox, StringVar
 from arcticdb import Arctic
 import pandas as pd
 from data_and_research import ac, fetch_strategies, fetch_strategy_params, update_params_in_db, get_strategy_allocation_bounds, update_weights

@@ -16,12 +16,10 @@ class PortfolioManager:
         self.ib = ib_client
         self.fx_cache = FXCache(ib_client)
         self.base = [entry.currency for entry in self.ib.accountSummary() if entry.tag == "EquityWithLoanValue"][0]
-        if arctic:
-            self.portfolio_library = arctic.get_library('portfolio', create_if_missing=True)
-            self.pnl_library = arctic.get_library('pnl', create_if_missing=True)
-        else:
-            self.portfolio_library = ac.get_library('portfolio', create_if_missing=True)
-            self.pnl_library = ac.get_library('pnl', create_if_missing=True)
+        self.arctic = arctic if arctic else ac
+        self.portfolio_library = self.arctic.get_library('portfolio', create_if_missing=True)
+        self.pnl_library = self.arctic.get_library('pnl', create_if_missing=True)
+
         self.account_id = self.ib.managedAccounts()[0]
     
     def _create_strategy_entry_in_portfolio_lib_(self,strategy,symbol,quantity):

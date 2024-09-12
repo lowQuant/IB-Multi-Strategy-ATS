@@ -2,18 +2,30 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 import time, datetime
-from arcticdb import Arctic, QueryBuilder
+from arcticdb import QueryBuilder
 import yfinance as yf
 import talib
-# from arcticdb import Arctic, QueryBuilder
-from utils import ac
+import sys, os
 
-lib = ac.get_library('stocks', create_if_missing=True)
-print(ac.list_libraries())
-symbol_df = pd.read_csv("data_and_research/us_stocks/symbols.csv",delimiter=',',index_col='Symbol').drop('Unnamed: 0',axis=1)
-symbols = symbol_df.index.unique().to_list()
-# names = symbol_df.Name.to_list()
-# sectors = symbol_df.Sector.to_list()
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils import ac, initialize_db
+
+ac = initialize_db('data_and_research/db')
+universe = ac.get_library('univ', create_if_missing=True)
+df = universe.read('us_equities',columns=['Symbol','Name','Sector','Market Cap']).data
+
+symbols = df['Symbol'].unique().to_list()
+names = df.Name.to_list()
+sectors = df.Sector.to_list()
+
+lib = ac.get_library('us_equities', create_if_missing=True)
+
+# Alternative Idea - due to large universe 
+# 1) split symbols by sector
+# 2) calculate sector ranks
+# 3) Store each sector group in a sector table in ArcticDB, e.g. us_equities/sectorname
+# 4) Store each stock individually in us_equities/symbol
+# 5) Create a sector overview table in ArcticDB that tracks relative strength of sectors (short-term) and (long-term) - ArcticDBs aggregate function can help
 
 def split_symbols(symbols, chunk_size):
     """Split a list of symbols into smaller chunks."""
@@ -32,10 +44,10 @@ def download_and_store(chunk):
     df = df.sort_values(by='Symbol',axis='index',kind='stable')
     print(df.columns)
     # Add additional information
-    # df["Name"] = df["Symbol"].map(symbol_df["Name"])
-    # df['Sector'] = df['Symbol'].map(symbol_df['Sector'])
+    df["Name"] = df["Symbol"].map(symbol_df["Name"])
+    df['Sector'] = df['Symbol'].map(symbol_df['Sector'])
 
-    #df["20D_SMA"] = df.groupby("Symbol")["Close"].rolling(window=20).mean().reset_index(level=0, drop=True)
+    df["20D_SMA"] = df.groupby("Symbol")["Close"].rolling(window=20).mean().reset_index(level=0, drop=True)
     df["50D_SMA"] = df.groupby("Symbol")["Close"].rolling(window=50).mean().reset_index(level=0, drop=True)
     df["200D_SMA"] = df.groupby("Symbol")["Close"].rolling(window=200).mean().reset_index(level=0, drop=True)
     #df['ATR'] = df.groupby('Symbol').apply(lambda group: talib.ATR(group['High'], group['Low'], group['Close'], timeperiod=14)).reset_index(level=0, drop=True)
