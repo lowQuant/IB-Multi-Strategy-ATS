@@ -369,7 +369,7 @@ class DatabaseWindow:
             messagebox.showerror("Error", f"Failed to schedule task on Windows: {e}")
 
     def schedule_task_unix(self, file_path, time_of_day, frequency):
-        """Schedule the task using cron (for Linux/macOS)."""
+        """Schedule the task using cron (for Linux/macOS) with logging."""
         try:
             # Parse the time
             hour, minute = time_of_day.split(":")
@@ -380,25 +380,18 @@ class DatabaseWindow:
             elif frequency == "Monthly":
                 cron_time = f"{minute} {hour} 1 * *"  # 1st of every month
 
-            # Add the cron job
-            cron_command = f'(crontab -l; echo "{cron_time} python {file_path}") | crontab -'
+            # Derive log file path: same directory, base filename with .txt extension
+            base_name = os.path.splitext(file_path)[0]
+            log_file = f"{base_name}.txt"
+
+            # Add the cron job with logging
+            cron_command = f'(crontab -l; echo "{cron_time} python {file_path} >> {log_file} 2>&1") | crontab -'
             subprocess.run(cron_command, check=True, shell=True)
 
-            # Update the task list and status
-            self.update_task_list(f"Task: {file_path} at {time_of_day} ({frequency})")
-            self.status_var.set(f"Task scheduled successfully for {file_path}!")
+            self.hint_label.config(text=f"Task scheduled successfully for {file_path}!")
         except subprocess.CalledProcessError as e:
             messagebox.showerror("Error", f"Failed to schedule task on {self.operating_system}: {e}")
 
-    def update_task_list(self, task_description):
-        """Update the task list with a new task description."""
-        # Clear the 'No scheduled tasks' text if it exists
-        if self.task_listbox.get(0) == "No scheduled tasks":
-            self.task_listbox.delete(0)
-
-        # Add the new task to the list
-        self.task_listbox.insert(tk.END, task_description)
-    
     def refresh_task_list(self):
         """Retrieve saved jobs from ArcticDB and update the left pane."""
         jobs_df = self.data_manager.get_saved_jobs()
