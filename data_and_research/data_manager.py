@@ -145,7 +145,6 @@ def main():
     args = parser.parse_args()
 
     # Create an instance of DataManager
-    ac = initialize_db("data_and_research/db")
     data_manager = DataManager(ib_client=None,arctic=ac)
     
     if args.store_data and args.script and args.library and args.symbol:
