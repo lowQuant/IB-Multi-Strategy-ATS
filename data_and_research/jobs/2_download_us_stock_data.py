@@ -44,10 +44,10 @@ def download_and_store(chunk):
     df = df.sort_values(by='Symbol',axis='index',kind='stable')
     print(df.columns)
     # Add additional information
-    # df["Name"] = df["Symbol"].map(symbol_df["Name"])
-    # df['Sector'] = df['Symbol'].map(symbol_df['Sector'])
+    df["Name"] = df["Symbol"].map(symbol_df["Name"])
+    df['Sector'] = df['Symbol'].map(symbol_df['Sector'])
 
-    #df["20D_SMA"] = df.groupby("Symbol")["Close"].rolling(window=20).mean().reset_index(level=0, drop=True)
+    df["20D_SMA"] = df.groupby("Symbol")["Close"].rolling(window=20).mean().reset_index(level=0, drop=True)
     df["50D_SMA"] = df.groupby("Symbol")["Close"].rolling(window=50).mean().reset_index(level=0, drop=True)
     df["200D_SMA"] = df.groupby("Symbol")["Close"].rolling(window=200).mean().reset_index(level=0, drop=True)
     #df['ATR'] = df.groupby('Symbol').apply(lambda group: talib.ATR(group['High'], group['Low'], group['Close'], timeperiod=14)).reset_index(level=0, drop=True)
