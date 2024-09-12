@@ -1,4 +1,0 @@
-broker
-data_and_research
-gui
-strategy_manager
