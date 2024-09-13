@@ -411,3 +411,9 @@ logs/jobs/
 
 # ignore setup folder
 .IB_Multi_Strategy_ATS.egg-info
+
+# ignore setup folder
+.IB_Multi_Strategy_ATS.egg-info
+
+# ignore setup folder
+.IB_Multi_Strategy_ATS.egg-info
