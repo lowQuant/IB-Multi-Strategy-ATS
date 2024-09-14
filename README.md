@@ -1,7 +1,5 @@
 # IB-Multi-Strategy-ATS
 
-An Automated Trading System (ATS) for managing and executing multiple trading strategies via Interactive Brokers (IB). This ATS leverages ib_insync for efficient and easy trading with IB, and uses ArcticDB for robust and scalable storage of strategy cash flow and P&L data.
-
 ![ATS](ATS.png)
 
 ## Summary
