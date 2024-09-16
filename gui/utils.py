@@ -31,19 +31,22 @@ def load_strategy(strategy_name):
 
 def start_trading(stop_button, start_button, window, start_event):
     global strategy_manager, ib_client
-    ib_client = connect_to_IB()
-    if ib_client:
-        start_event.set()
-        strategy_manager = StrategyManager(ib_client)
-        strategy_manager.start_all()
+    start_event.set()
+    strategy_manager = StrategyManager()
+    strategy_manager.start_all()
+    # # ib_client = connect_to_IB()
+    # if ib_client:
+    #     start_event.set()
+    #     strategy_manager = StrategyManager(ib_client)
+    #     strategy_manager.start_all()
 
-        stop_button.place(x=48.0, y=79.0, width=178.0, height=58.0)  # Show 'Stop Trading' button
-        start_button.place_forget()  # Hide 'Start Trading' button
-        window.update_idletasks()  # Update the window to reflect changes
-    else:
-        # If connection fails, update the log
-        pass
-        #add_log("""Make sure TWS or IB Gateway is running/ you are using the correct port""")
+    #     stop_button.place(x=48.0, y=79.0, width=178.0, height=58.0)  # Show 'Stop Trading' button
+    #     start_button.place_forget()  # Hide 'Start Trading' button
+    #     window.update_idletasks()  # Update the window to reflect changes
+    # else:
+    #     # If connection fails, update the log
+    #     pass
+    #     #add_log("""Make sure TWS or IB Gateway is running/ you are using the correct port""")
         
 def stop_trading(stop_button, start_button, window):
     global strategy_manager

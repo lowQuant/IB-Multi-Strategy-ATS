@@ -1,18 +1,20 @@
 # strategy_manager/strategy_manager.py
 
 import importlib.util
-import os, queue, asyncio
-import threading
+import os, queue, asyncio, threading
+from multiprocessing import Process
 from data_and_research.utils import fetch_strategies
 from gui.log import add_log
 from broker.trademanager import TradeManager
+from broker import connect_to_IB, disconnect_from_IB
 
 class StrategyManager:
-    def __init__(self, ib_client):
-        self.ib_client = ib_client
-        self.strategy_threads = []
+    def __init__(self):
+        self.ib_client_id = 0
+        self.ib_client = connect_to_IB(clientId = self.ib_client_id)
+        self.strategy_processes = []
         self.strategies = []
-        self.trade_manager = TradeManager(ib_client=ib_client)
+        self.trade_manager = TradeManager(ib_client=self.ib_client)
 
         # Create a queue for thread safe editing of shared resources (e.g. updating available cash etc.)
         self.message_queue = queue.Queue()
@@ -25,19 +27,13 @@ class StrategyManager:
         #TODO: load data before
 
     def load_strategies(self):
-        '''loads all active strategies that the user added via the Settings/Strategies Menu
-            & stores them in self.strategies'''
         strategy_dir = "strategy_manager/strategies"
         strategy_names, self.strategy_df = fetch_strategies()
         active_filenames = set(self.strategy_df[self.strategy_df["active"] == "True"]['filename'])
 
         if strategy_names:
-            # strategy_files = [f for f in self.strategy_df['filename'] if f in os.listdir(strategy_dir)]
             strategy_files = [f for f in self.strategy_df['filename'] if f in os.listdir(strategy_dir) and f in active_filenames]
             for file in strategy_files:
-                
-                # print([f for f in self.strategy_df['filename']])
-                # print("Found strategy files:", strategy_files)
                 strategy_path = os.path.join(strategy_dir, file)
                 module_name = file[:-3]
                 print("Loading strategy:", module_name)
@@ -49,6 +45,8 @@ class StrategyManager:
 
                     if hasattr(module, 'Strategy'):
                         print(f"Instantiating strategy: {module_name}")
+                        # Note: Each strategy now needs its own IB client instance
+                        self.ib_client_id += 1 # returning a new client id
                         strategy_instance = module.Strategy(self.ib_client, self, self.trade_manager)
                         self.strategies.append(strategy_instance)
                     else:
@@ -61,12 +59,19 @@ class StrategyManager:
     def start_all(self):
         for strategy in self.strategies:
             if hasattr(strategy, 'run'):
-                thread = threading.Thread(target=strategy.run)
-                thread.daemon = True
-                thread.start()
-                self.strategy_threads.append(thread)
+                # Start each strategy in its own process
+                process = Process(target=strategy.run)
+                process.start()
+                self.strategy_processes.append(process)
             else:
                 print(f"Strategy {type(strategy).__name__} does not have a run method.")
+
+    def stop_all(self):
+        for process in self.strategy_processes:
+            process.terminate()
+            process.join()
+        # Disconnect StrategyManager from ib
+        disconnect_from_IB(self.ib_client)
 
     def process_messages(self):
         while True:
@@ -81,7 +86,6 @@ class StrategyManager:
             # Add more message types as needed
             self.message_queue.task_done()
 
-
     def handle_fill_event(self, strategy_symbol, trade, fill):
         # Implement fill event handling logic
         add_log(f"Order filled for {strategy_symbol}: {fill}")
@@ -89,13 +93,6 @@ class StrategyManager:
     def handle_status_change(self, strategy_symbol, trade, status):
         # Implement status change handling logic
         add_log(f"{status}: {trade.order}")
-
-    def stop_all(self):
-        # Implement logic to gracefully stop all strategies
-        for strategy in self.strategies:
-            strategy.stop()  # Assuming each strategy has a stop method
-        for thread in self.strategy_threads:
-            thread.join(timeout=5)
 
     def update_on_trade(self, strategy, trade_details):
         strategy_name = type(strategy).__name__

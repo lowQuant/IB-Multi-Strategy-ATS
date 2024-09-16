@@ -6,6 +6,7 @@ import datetime, time
 from data_and_research import get_strategy_allocation_bounds
 from broker.trademanager import TradeManager
 from broker.functions import get_term_structure
+from broker import connect_to_IB, disconnect_from_IB
 from gui.log import add_log, start_event
 
 PARAMS = {"VIX Threshold": 16, "Contango":True}
@@ -16,8 +17,9 @@ PARAMS = {"VIX Threshold": 16, "Contango":True}
         # trade.statusEvent += self.trade_manager.on_status_change 
 
 class Strategy:
-    def __init__(self,ib,strategy_manager,trade_manager):
-        self.ib = ib
+    def __init__(self,ib_client,strategy_manager,trade_manager):
+        # self.ib = connect_to_IB(clientId=clientId)
+        self.ib = ib_client
         self.strategy_manager = strategy_manager
         self.trade_manager = trade_manager
 
@@ -177,8 +179,10 @@ class Strategy:
     
     def run(self):
         add_log(f"Strategy2 Thread Started")
-        start_event.wait()
-        add_log(f"{self.term_structure}")
+        # self.ib = connect_to_IB(clientId=clientId)
+        # start_event.wait()
+        # add_log(f"{self.term_structure}")
+        # self.check_conditions_and_trade()
         # while start_event.is_set():
         #     add_log("Executing Strategy 2")
         #     time.sleep(4)
@@ -189,10 +193,11 @@ class Strategy:
 
     def update_investment_status(self):
         """ Update the investment status of the strategy """
-        self.current_weight = self.check_investment_weight(self, symbol=self.instrument_symbol)
-        self.invested = bool(self.current_weight)
         self.equity = sum(float(entry.value) for entry in self.ib.accountSummary() if entry.tag == "EquityWithLoanValue")
         self.cash = sum(float(entry.value) for entry in self.ib.accountSummary() if entry.tag == "AvailableFunds")
+        self.current_weight = self.check_investment_weight(self, symbol=self.instrument_symbol)
+        self.invested = bool(self.current_weight)
+
 
     def update_invested_contract(self):
         """ Update the currently invested contract """
