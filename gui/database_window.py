@@ -98,6 +98,14 @@ class DatabaseWindow:
         horiz_scroll.pack(side='bottom', fill='x')  # Pack horizontal scrollbar
         self.tree.configure(xscrollcommand=horiz_scroll.set)
 
+        # **Add Context Menu for Treeview**
+        self.tree.bind("<Button-3>", self.on_treeview_right_click)  # Right-click on Windows
+        self.tree.bind("<Button-2>", self.on_treeview_right_click)  # Right-click on macOS
+
+        # Create the context menu
+        self.tree_context_menu = Menu(self.tree, tearoff=0)
+        self.tree_context_menu.add_command(label="Delete Row", command=self.delete_selected_row)
+        
     def load_data(self):
         library_name = self.library_combo.get()
         symbol = self.symbol_combo.get()
@@ -317,7 +325,7 @@ class DatabaseWindow:
             print("Error deleting task:", e)
 
     def delete_job_from_crontab(self, job_command):
-        cron = CronTab(user=True)  # Use the current user’s crontab
+        cron = CronTab(user=True)  # Use the current user's crontab
         job_command = job_command.split('echo "')[-1].split('")')[0].replace('"','')
         
         # Find the job by command and remove it
@@ -575,6 +583,52 @@ class DatabaseWindow:
         except subprocess.CalledProcessError as e:
             messagebox.showerror("Error", f"Failed to schedule task on {self.operating_system}: {e}")
             
+    def on_treeview_right_click(self, event):
+        """Handle right-click on treeview rows to show context menu."""
+        # Identify the row under the cursor
+        region = self.tree.identify("region", event.x, event.y)
+        if region == "cell":
+            row_id = self.tree.identify_row(event.y)
+            if row_id:
+                # Select the row
+                self.tree.selection_set(row_id)
+                # Show the context menu
+                self.tree_context_menu.post(event.x_root, event.y_root)
+
+    def delete_selected_row(self):
+        """Delete the selected row from the Treeview and ArcticDB."""
+        selected_items = self.tree.selection()
+        print(selected_items)
+        if not selected_items:
+            messagebox.showinfo("Information", "No row selected.")
+            return
+
+        for selected_item in selected_items:
+            values = self.tree.item(selected_item, 'values')
+            index = values[0]  # Assuming the first column is 'Index'
+            print(values)
+            # Confirm deletion
+            confirm = messagebox.askyesno("Confirm Deletion", f"Are you sure you want to delete row {index}?")
+            if not confirm:
+                continue
+
+            try:
+                # Remove the row from the DataFrame
+                self.data_df.drop(index, inplace=True)
+                self.data_df.reset_index(drop=True, inplace=True)
+
+                # Update ArcticDB with the modified DataFrame
+                library_name = self.library_combo.get()
+                symbol = self.symbol_combo.get()
+                self.data_manager.arctic.get_library(library_name).write(symbol, self.data_df)
+
+                # Refresh the Treeview
+                self.load_data()
+
+                messagebox.showinfo("Success", f"Row {index} has been deleted successfully.")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to delete row {index}: {e}")
+
 def open_database_window(data_manager):
     root = tk.Tk()
     app = DatabaseWindow(root, data_manager)
