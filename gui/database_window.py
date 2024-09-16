@@ -2,6 +2,7 @@ import platform, subprocess, os, re, sys, socket
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog, StringVar, Frame, Label, Text, Entry, Button, Checkbutton, IntVar, Menu
 from crontab import CronTab
+import pandas as pd
 
 class DatabaseWindow:
     def __init__(self, master, data_manager):
@@ -598,36 +599,57 @@ class DatabaseWindow:
     def delete_selected_row(self):
         """Delete the selected row from the Treeview and ArcticDB."""
         selected_items = self.tree.selection()
-        print(selected_items)
         if not selected_items:
             messagebox.showinfo("Information", "No row selected.")
             return
 
         for selected_item in selected_items:
-            values = self.tree.item(selected_item, 'values')
-            index = values[0]  # Assuming the first column is 'Index'
-            print(values)
-            # Confirm deletion
-            confirm = messagebox.askyesno("Confirm Deletion", f"Are you sure you want to delete row {index}?")
-            if not confirm:
-                continue
-
             try:
-                # Remove the row from the DataFrame
-                self.data_df.drop(index, inplace=True)
-                self.data_df.reset_index(drop=True, inplace=True)
+                values = self.tree.item(selected_item, 'values')
+                columns = self.tree['columns']
+                row_data = {columns[i]: values[i] for i in range(1, len(columns))}
+                index = values[0]  # Assuming the first column is 'Index'
+                
+                # Confirm deletion
+                confirm = messagebox.askyesno("Confirm Deletion", f"Are you sure you want to delete row {index}?")
+                if not confirm:
+                    continue
 
-                # Update ArcticDB with the modified DataFrame
-                library_name = self.library_combo.get()
-                symbol = self.symbol_combo.get()
-                self.data_manager.arctic.get_library(library_name).write(symbol, self.data_df)
+                # Identify the row in the DataFrame
+                df = self.data_df.copy()
 
-                # Refresh the Treeview
-                self.load_data()
+                # Build a boolean mask where all specified columns match the row data
+                mask = pd.Series([True] * len(df))
+                for key, value in row_data.items():
+                    mask &= df[key].astype(str) == str(value)
 
-                messagebox.showinfo("Success", f"Row {index} has been deleted successfully.")
+                # Check how many rows match the criteria
+                matched_rows = df[mask]
+                if matched_rows.empty:
+                        messagebox.showerror("Error", "No matching row found in the database.")
+                        continue
+                elif len(matched_rows) > 1:
+                    messagebox.showerror("Error", "Multiple matching rows found. Cannot delete uniquely.")
+                    continue
+                else:
+                    # Get the DataFrame index of the matched row
+                    row_index = matched_rows.index[0]
+
+                    # Delete the row from the DataFrame
+                    self.data_df.drop(row_index, inplace=True)
+
+                    # Update ArcticDB with the modified DataFrame
+                    library_name = self.library_combo.get()
+                    symbol = self.symbol_combo.get()
+                    self.data_manager.arctic.get_library(library_name).write(symbol, self.data_df)
+
+                    # Refresh the Treeview to reflect changes
+                    self.load_data()
+
+                    messagebox.showinfo("Success", "The selected row has been deleted successfully.")
+
             except Exception as e:
-                messagebox.showerror("Error", f"Failed to delete row {index}: {e}")
+                messagebox.showerror("Error", f"An unexpected error occurred: {e}")
 
 def open_database_window(data_manager):
     root = tk.Tk()
