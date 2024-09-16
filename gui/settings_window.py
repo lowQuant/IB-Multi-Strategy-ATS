@@ -1,5 +1,5 @@
-from tkinter import Toplevel, ttk, Frame, Label, Text, Entry, Button, Checkbutton, IntVar, messagebox, Toplevel, StringVar
-import time
+from tkinter import Toplevel, ttk, Frame, Label, Text, Entry, Button, Checkbutton, IntVar, messagebox, StringVar
+from arcticdb import Arctic
 import pandas as pd
 from data_and_research import ac, fetch_strategies, fetch_strategy_params, update_params_in_db, get_strategy_allocation_bounds, update_weights
 
@@ -151,6 +151,11 @@ def save_general_settings(port, db_local, db_s3, aws_access_id, aws_access_key, 
     if db_s3 and not (aws_access_id and aws_access_key and aws_bucket_name and aws_region):
         messagebox.showerror("Error", "Please fill all AWS S3 credentials.")
         return
+    if db_s3:
+        if not test_aws_s3_connection(aws_access_id, aws_access_key, aws_bucket_name, aws_region):
+            messagebox.showerror("Error", "Test connection failed. Double check your S3 connection credentials.")
+            return  # Stop the function if S3 connection test fails
+    
     if tws_auto_start and not (username and password):
         messagebox.showerror("Error","Username and/or Password missing")
 
@@ -175,13 +180,28 @@ def save_general_settings(port, db_local, db_s3, aws_access_id, aws_access_key, 
     try:
         lib = ac.get_library("general")
         lib.write("settings", settings_df, metadata={'source': 'gui'})
-        messagebox.showinfo("Success", "Settings saved successfully.")
+        messagebox.showinfo("Success", "Settings saved successfully. Restart Application to make changes effective.")
         changes_made = False
     except Exception as e:
         messagebox.showerror("Error", f"Failed to save settings: {e}")
     # Reset changes_made only if save is successful
     changes_made = False
-    # messagebox.showinfo("Success", "Settings saved successfully.")
+
+# Error Handling functions for func 'save_general_settings'
+def test_aws_s3_connection(aws_access_id, aws_access_key, bucket_name, region):
+    try:
+        test_connection =Arctic(f's3://s3.{region}.amazonaws.com:{bucket_name}?region={region}&access={aws_access_id}&secret={aws_access_key}')
+        connection_worked = None
+        try:
+            test_connection.create_library('test_connection')
+            test_connection.delete_library('test_connection')
+            connection_worked = True
+        except:
+            connection_worked = False
+        return connection_worked
+    except Exception as e:
+        messagebox.showerror("Connection Error", f"Failed to connect to AWS S3: {e}")
+        return False
 
 def exit_settings(settings_window):
     global changes_made
@@ -303,35 +323,41 @@ def add_strategy_window(tab_frame,details_tab):
     # Function to save the strategy details and close the window
     def save_and_exit():
         # Saving Strategy Details
-        # Creating a dictionary of strategy details
-        details_dict = {
-            "name": name_entry.get(),
-            "filename": file_entry.get(),
-            "description": description_text.get('1.0', 'end-1c'),
-            "target_weight": weight_entry.get(),
-            'min_weight': min_weight_entry.get(),
-            'max_weight': max_weight_entry.get(),
-            'params': "",
-            'active': str(True)
-        }
+        strategy_symbol = symbol_entry.get()
+        strategies, _ = fetch_strategies()
 
-        # Convert dictionary to DataFrame
-        details_df = pd.DataFrame([details_dict], index=[symbol_entry.get()])
-        # details_df = pd.DataFrame.from_dict(details_dict, orient='index', columns=['Value'])
+        if strategy_symbol in strategies:
+            messagebox.showerror("Error", f"Strategy Symbol already exists. Choose a different.")
+        else:
+            # Creating a dictionary of strategy details
+            details_dict = {
+                "name": name_entry.get(),
+                "filename": file_entry.get(),
+                "description": description_text.get('1.0', 'end-1c'),
+                "target_weight": weight_entry.get(),
+                'min_weight': min_weight_entry.get(),
+                'max_weight': max_weight_entry.get(),
+                'params': "",
+                'active': str(True)
+            }
 
-        # Write settings to Arctic
-        try:
-            lib = ac.get_library('general', create_if_missing=True)
-            lib.append(f"strategies", details_df)#, metadata={'source': 'gui'})
-            messagebox.showinfo("Success", f"{name_entry.get()} saved successfully.")
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to save settings: {e}")
+            # Convert dictionary to DataFrame
+            details_df = pd.DataFrame([details_dict], index=[symbol_entry.get()])
+            # details_df = pd.DataFrame.from_dict(details_dict, orient='index', columns=['Value'])
 
-        # ...
-        update_overview_tab(tab_frame)  # Refresh the overview tab after saving
-        update_details_tab(details_tab)
-        new_window.destroy()
+            # Write settings to Arctic
+            try:
+                lib = ac.get_library('general', create_if_missing=True)
+                lib.append(f"strategies", details_df)#, metadata={'source': 'gui'})
+                messagebox.showinfo("Success", f"{name_entry.get()} saved successfully.")
+                
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to save settings: {e}")
+
+            # ...
+            update_overview_tab(tab_frame)  # Refresh the overview tab after saving
+            update_details_tab(details_tab)
+            new_window.destroy()
 
     # Exit Button
     Button(new_window, text="Save & Exit", command=save_and_exit).grid(row=98, column=0, padx=5, pady=5)

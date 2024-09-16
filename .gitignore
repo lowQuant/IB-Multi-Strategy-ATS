@@ -3,6 +3,8 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/main/VisualStudio.gitignore
 *.env
+*.HEIC
+
 # User-specific files
 *.rsuser
 *.suo
@@ -397,3 +399,16 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+# ignore venv
+venv/
+
+# ignore my job logs
+logs/jobs/
+
+# ignoring DS Store file
+.DS_Store
+
+# ignore setup folder
+/IB_Multi_Strategy_ATS.egg-info
+

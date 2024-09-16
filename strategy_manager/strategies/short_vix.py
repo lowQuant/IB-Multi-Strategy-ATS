@@ -1,35 +1,62 @@
 import yfinance as yf
-from ib_insync import *
+from ib_async import *
 import pandas as pd
 import numpy as np
-import datetime, time
-from data_and_research import get_strategy_allocation_bounds
+import datetime, time, asyncio
+from data_and_research import get_strategy_allocation_bounds, get_strategy_symbol
 from broker.trademanager import TradeManager
+from broker import connect_to_IB, disconnect_from_IB
 from broker.functions import get_term_structure
 from broker import connect_to_IB, disconnect_from_IB
 from gui.log import add_log, start_event
 
-PARAMS = {"VIX Threshold": 16, "Contango":True}
+PARAMS = {"VIX Threshold": 16.5, "Contango":True}
 
 # TODO: # FINISH STRATEGY
         # Assign callbacks for order updates and code the functions in trade_manager which sends updates to strategy_manager
         # trade.fillEvent += self.trade_manager.on_fill
         # trade.statusEvent += self.trade_manager.on_status_change 
+ 
+strategy = None
 
+def manage_strategy(client_id, strategy_manager):
+    try:
+        # Create a new event loop for this thread
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        # Instantiate the Strategy class
+        global strategy
+        strategy = Strategy(client_id, strategy_manager)
+        strategy.run()
+    except Exception as e:
+        # Handle exceptions
+        print(f"Error in {strategy.strategy_symbol}: {e}")
+
+    finally:
+        # Clean up
+        disconnect_from_IB(strategy.ib, strategy.strategy_symbol)
+        loop.close()
+
+def disconnect():
+    strategy.disconnect()
+    
 class Strategy:
-    def __init__(self,ib_client,strategy_manager,trade_manager):
-        # self.ib = connect_to_IB(clientId=clientId)
-        self.ib = ib_client
+    def __init__(self, client_id, strategy_manager):
+        self.client_id = client_id
         self.strategy_manager = strategy_manager
-        self.trade_manager = trade_manager
-
-        self.strategy_symbol = "SVIX"
+        self.filename = self.__class__.__module__ +".py"
+        self.strategy_symbol = get_strategy_symbol(self.filename)
         self.SPY_yfTicker = "^GSPC"
         self.VIX_yfTicker = "^VIX"
         self.instrument_symbol = "VXM"
 
         # Get Data on Strategy Initialization
+        self.ib = connect_to_IB(clientid=self.client_id, symbol=self.strategy_symbol)
+        self.trade_manager = TradeManager(ib_client=self.ib,strategy_manager=self.strategy_manager)
+
         self.term_structure = get_term_structure(self.instrument_symbol,"VIX",ib=self.ib)
+        print(self.term_structure)
         self.volatility_risk_premium = self.download_vix_and_spy_data()["VRP"].iloc[-1]
         self.is_contango = self.is_contango()
         
@@ -38,7 +65,7 @@ class Strategy:
         self.update_invested_contract()
         #self.min_weight, self.target_weight, self.max_weight = 0.04, 0.07, 0.1
         self.target_weight, self.min_weight, self.max_weight = get_strategy_allocation_bounds(self.strategy_symbol)
-       
+        
     @staticmethod
     def check_investment_weight(self, symbol):
         """ Returns the investment weight for the given symbol. """
@@ -60,10 +87,10 @@ class Strategy:
 
     def update_investment_status(self):
         """ Update the investment status of the strategy """
-        self.current_weight = self.check_investment_weight(self, symbol=self.instrument_symbol)
-        self.invested = bool(self.current_weight)
         self.equity = sum(float(entry.value) for entry in self.ib.accountSummary() if entry.tag == "EquityWithLoanValue")
         self.cash = sum(float(entry.value) for entry in self.ib.accountSummary() if entry.tag == "AvailableFunds")
+        self.current_weight = self.check_investment_weight(self, symbol=self.instrument_symbol)
+        self.invested = bool(self.current_weight)
 
     def update_invested_contract(self):
         """ Update the currently invested contract """
@@ -175,14 +202,11 @@ class Strategy:
 
                 if rebal_amount:
                     print(f"We need to change our positioning by {rebal_amount} contracts")
-                    self.trade_manager.trade(self,current_contract,rebal_amount*-1)
+                    self.trade_manager.trade(current_contract,rebal_amount*-1)
     
     def run(self):
-        add_log(f"Strategy2 Thread Started")
-        # self.ib = connect_to_IB(clientId=clientId)
-        # start_event.wait()
-        # add_log(f"{self.term_structure}")
-        # self.check_conditions_and_trade()
+        add_log(f"{self.strategy_symbol} Thread Started")
+        self.check_conditions_and_trade()
         # while start_event.is_set():
         #     add_log("Executing Strategy 2")
         #     time.sleep(4)
@@ -190,6 +214,10 @@ class Strategy:
         #     time.sleep(4)
         #     add_log(f"S2: Weight:{self.current_weight}")
         #     add_log(f"S2: VXM Future in contango: {self.is_contango}")
+
+    def disconnect(self):
+        # Disconnect logic for the IB client
+        disconnect_from_IB(ib=self.ib,symbol=self.strategy_symbol)
 
     def update_investment_status(self):
         """ Update the investment status of the strategy """
@@ -243,7 +271,8 @@ class Strategy:
             contract_price = self.get_contract_price(contract)
             multiplier = int(contract.multiplier)
             quantity = self.calculate_number_of_contracts(allocated_amount,contract_price,multiplier)
-            self.trade_manager.trade(self,contract,quantity)
+            print(f"Shorting {quantity} {contract.localSymbol}")
+            self.trade_manager.trade(contract,quantity)
         else:
             add_log(f"Insufficient Cash to run strategy{self.strategy_symbol}")
 
@@ -274,10 +303,13 @@ class Strategy:
             :param orderRef: Reference identifier for the order.
         """
         if self.get_dte(current_contract) < self.get_dte(new_contract):
-            self.trade_manager.roll_future(self,current_contract,new_contract,orderRef)
+            self.trade_manager.roll_future(current_contract,new_contract,orderRef)
         else:
             add_log("Not allowed to roll future down the curve")
 
     def close_position(self, contract):
         """ Close the position in the given future contract """
         # Code for closing the position...
+
+if __name__ == '__main__':
+    print("main")

@@ -4,12 +4,44 @@ import pandas as pd
 from datetime import datetime
 import importlib.util
 from pathlib import Path
-from arcticdb import Arctic, QueryBuilder
+from arcticdb import Arctic, QueryBuilder, LibraryOptions
+import os
 
-def initialize_db(db_path):
-    global ac
-    ac_local = Arctic(f'lmdb://{db_path}?map_size=5MB')
+# Create LibraryOptions with dynamic_schema enabled
+LIBRARY_OPTIONS = LibraryOptions(dynamic_schema=True)
+
+def initialize_db(db_path=None):
+    """
+    Generalized ArcticDB connection handler.
     
+    db_path : str, optional
+        Custom path to the Arctic database. If not provided, default paths will be checked.
+        
+    Returns
+    -------
+    ac : Arctic connection instance
+    """
+    
+    # Default paths to check (adjust based on your actual paths)
+    default_paths = [
+        "data_and_research/db",  # Default path for the current folder structure
+        "../db",                 # One level up (if called from notebooks, etc.)
+        os.path.join(os.getcwd().split('IB-Multi-Strategy-ATS')[0],'IB-Multi-Strategy-ATS','data_and_research','db')]
+    
+    # Use the provided db_path or find a default path
+    if db_path:
+        db_paths = [db_path]  # Use the given db path
+    else:
+        db_paths = default_paths
+    
+    for path in db_paths:
+        if os.path.exists(path):
+            ac_local = Arctic(f'lmdb://{path}?map_size=5MB')
+            print(f"Connected to ArcticDB at {path}")
+            break
+    else:
+        ac_local = Arctic(f'lmdb://data_and_research/db?map_size=5MB')
+
     if not "general" in ac_local.list_libraries():
         print("Creating library 'general' where *settings and *strategies will be stored")
         library = ac_local.get_library('general', create_if_missing=True)
@@ -28,8 +60,7 @@ def initialize_db(db_path):
         df = pd.DataFrame(data, index=index_values)
         library.write(symbol="settings",data=df)
         ac = ac_local
-        return ac
-    
+            
     else: # read local settings if settings table exists
         library = ac_local.get_library('general', create_if_missing=True)
         settings_df = library.read("settings").data
@@ -50,9 +81,20 @@ def initialize_db(db_path):
                 lib.write("settings", settings_df)
         else:
             ac = ac_local
-        return ac
 
-ac = initialize_db("data_and_research/db")
+    # Create library portfolio
+    if not "portfolio" in ac.list_libraries():
+        print("Creating library 'portfolio' that will keep track of our strategies' positions")
+        library = ac.get_library('portfolio', create_if_missing=True, library_options=LIBRARY_OPTIONS)
+    
+    if not "pnl" in ac.list_libraries():
+        print("Creating library 'pnl' that will keep track of strategy & account PnL")
+        library = ac.get_library('pnl', create_if_missing=True)
+
+    # Create other libraries here later (e.g. universe, stocks, futures etc.) 
+    return ac
+
+ac = initialize_db()
 
 def fetch_strategies():
     lib = ac.get_library('general', create_if_missing=True)
@@ -128,6 +170,16 @@ def update_params_in_db(strategy_symbol, params):
         print(f"Updated params for {strategy_symbol} in the database.")
     else:
         print(f"Strategy {strategy_symbol} not found in the database.")
+
+def get_strategy_symbol(filename):
+    try:
+        lib = ac.get_library('general')
+        df = lib.read("strategies").data
+        symbol = df[df.filename == filename].index.item()  # Using .item() to get the actual symbol
+        return symbol
+    except Exception as e:
+        print(f"Error retrieving strategy symbol: {e}")
+        return None
 
 def get_strategy_allocation_bounds(strategy_symbol):
     lib = ac.get_library('general')

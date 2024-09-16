@@ -5,7 +5,7 @@ from pathlib import Path
 from tkinter import Tk, Canvas, Entry, Text, Button, PhotoImage, Label
 
 # My imports
-from .utils import start_trading, stop_trading, exit_application, launch_jupyter
+from .utils import start_trading, stop_trading, exit_application, launch_jupyter, open_portfolio, open_database
 from .log import log_buffer, log_lock, start_event
 from .settings_window import open_settings_window
 
@@ -83,12 +83,29 @@ start_btn = Button(image=start_btn_img,
 )
 start_btn.place(x=48.0, y=79.0, width=178.0, height=58.0)
 
+# Research Button
 research_btn_img = PhotoImage(file=relative_to_assets("research.png"))
 research_btn = Button(image=research_btn_img,
     borderwidth=0,highlightthickness=0,
     command=lambda: launch_jupyter(),
     relief="flat")
 research_btn.place(x=16.0,y=506.0,width=181.0,height=36.0)
+
+# Portfolio Button
+portfolio_btn_img = PhotoImage(file=relative_to_assets("portfolio.png"))
+portfolio_btn = Button(image=portfolio_btn_img,
+    borderwidth=0,highlightthickness=0,
+    command=lambda: open_portfolio(),
+    relief="flat")
+portfolio_btn.place(x=365.0, y=86.0, width=143.0, height=47.0)
+
+# Database Button
+database_btn_img = PhotoImage(file=relative_to_assets("database.png"))
+database_btn = Button(image=database_btn_img,
+    borderwidth=0,highlightthickness=0,
+    command=lambda: open_database(),
+    relief="flat")
+database_btn.place(x=608.0,y=96.0,width=124.0,height=34.0)
 
 # Bottom Screen Textbox - Advertisement
 canvas.create_text(330.0,534.0,anchor="nw",
