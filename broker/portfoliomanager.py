@@ -99,16 +99,16 @@ class PortfolioManager:
             strategy_entries_in_ac = df_ac[(df_ac['symbol'] == symbol) & (df_ac['asset class'] == asset_class)]
             
             if strategy_entries_in_ac.empty: # no database entry, add position
-                print(f"{asset_class}:{symbol} not in ArcticDB. Appending df_ib row to df_merged")
+                # print(f"{asset_class}:{symbol} not in ArcticDB. Appending df_ib row to df_merged")
                 df_merged = pd.concat([df_merged, pd.DataFrame([row])])
             else:
                 strategy_entry_updated = self.update_and_aggregate_data(strategy_entries_in_ac, row)
-                print(f"{asset_class}:{symbol} in ArcticDB. Updated and aggregating data")
+                # print(f"{asset_class}:{symbol} in ArcticDB. Updated and aggregating data")
                 df_merged = pd.concat([df_merged, strategy_entry_updated])
                 
                 if row['position'] - strategy_entry_updated.position.sum() != 0:
                     # Handle the residual and concat to df_merged
-                    print(f"{asset_class}:{symbol} IB position does not equal ArcticDB's Position")
+                    # print(f"{asset_class}:{symbol} IB position does not equal ArcticDB's Position")
                     residual = self.handle_residual(strategy_entries_in_ac, row)
                     df_merged = pd.concat([df_merged, residual])
  
