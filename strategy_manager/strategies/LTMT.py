@@ -64,6 +64,7 @@ class Strategy:
         self.trade_manager = TradeManager(self.ib, self.strategy_manager)
         
         # Initialize strategy parameters
+        self.target_weight, self.min_weight, self.max_weight = get_strategy_allocation_bounds(self.strategy_symbol)
         self.initialize_strategy()
         
     def initialize_strategy(self):
@@ -87,9 +88,6 @@ class Strategy:
         # Generate Initial Signals
         self.generate_signals()
         
-        # Map monthly signals to daily data
-        self.map_signals_to_daily()
-        
     def fetch_historical_data(self):
         """Fetch historical daily price data for the strategy symbol"""
         # Fetch historical daily data using IB API
@@ -106,7 +104,7 @@ class Strategy:
         self.daily_data = util.df(bars)
         self.daily_data['date'] = pd.to_datetime(self.daily_data['date'])
         self.daily_data.set_index('date', inplace=True)
-        add_log(f"Fetched {len(self.daily_data)} historical daily data points for {self.strategy_symbol}")
+        print(f"Fetched {len(self.daily_data)} historical daily data points for {self.strategy_symbol}")
         
     def calculate_moving_averages(self):
         """Calculate the Exponential Moving Average (EMA) on monthly data"""
@@ -122,19 +120,14 @@ class Strategy:
         
         # Calculate EMA
         self.monthly_data['EMA'] = self.monthly_data['close'].ewm(span=self.ma_window, adjust=False).mean()
-        add_log(f"Calculated {self.ma_window}-month EMA for {self.strategy_symbol}")
+        print(f"Calculated {self.ma_window}-month EMA for {self.strategy_symbol}")
         
     def generate_signals(self):
         """Generate buy/sell signals based on EMA crossover in monthly data"""
         self.monthly_data['Signal'] = 0
         # Generate Buy Signal: When Close > EMA
         self.monthly_data['Signal'] = np.where(self.monthly_data['close'] > self.monthly_data['EMA'], 1, 0)
-        # Calculate Position Changes
-        self.monthly_data['Position'] = self.monthly_data['Signal'].diff()
-        add_log(f"Generated buy/sell signals for {self.strategy_symbol}")
         
-    def map_signals_to_daily(self):
-        """Map monthly signals to daily data"""
         # Initialize Signal column in daily data
         self.daily_data['Signal'] = 0
         
@@ -147,13 +140,19 @@ class Strategy:
             except KeyError:
                 # No signal for this date
                 pass
-        add_log(f"Mapped monthly signals to daily data for {self.strategy_symbol}")
+        print(f"Mapped monthly signals to daily data for {self.strategy_symbol}")
         
     def update_investment_status(self):
         """Update the investment status of the strategy"""
-        # TODO: Integrate with Portfolio Manager if available
-        pass
-    
+        self.positions_df = self.strategy_manager.portfolio_manager.match_ib_positions_with_arcticdb()
+        self.positions_df = self.positions_df[self.positions_df['symbol'] == self.strategy_symbol]
+        # if self.positions_df.empty:
+        #     print("Positions DataFrame is empty")
+        #     self.current_position = 0
+        self.current_position = self.positions_df['position'].iloc[-1] if not self.positions_df.empty else 0
+        print(f"Current position for {self.strategy_symbol}: {self.current_position}")
+        print(self.positions_df)
+
     def on_fill(self, trade, fill):
         """Handle fill event"""
         self.strategy_manager.message_queue.put({
@@ -178,81 +177,57 @@ class Strategy:
     def run(self):
         """Main loop to execute trading strategy"""
         # Subscribe to real-time market data
-        contract = Stock(self.symbol, 'SMART', 'USD')
-        self.ib.reqMktData(contract, '', False, False)
+        self.contract = Stock(self.symbol, 'SMART', 'USD')
+        self.ib.reqMktData(self.contract, '', False, False)
         
-        # Initialize last signal to prevent duplicate orders
-        self.last_signal = 0
-        
-        add_log(f"Starting trading loop for {self.symbol}")
+        # Check if the strategy is already invested
+        self.update_investment_status()
         
         while True:
-            # Get current date
-            current_datetime = datetime.now()
-            current_date = current_datetime.date()
+            latest_signal = self.daily_data['Signal'].iloc[-1]
             
-            # Check if today is the first trading day of the month
-            # if current_date.day == 1:
-            #     add_log(f"First day of the month detected for {self.strategy_symbol}")
-            # Fetch the latest month's data
-            self.fetch_latest_month()
+            if not self.current_position and latest_signal == 1:
+                quantity = int(self.calculate_position_size())
+                print(quantity)
+                # Buy Signal
+                self.trade_manager.trade(self.contract,quantity=quantity,
+                                         order_type='MKT',
+                                         urgency='Patient', 
+                                         useRth=True)
+                
+                add_log(f"Buy order placed for {self.strategy_symbol}")
+            elif self.is_invested() and latest_signal == 0:
+                # Sell Signal
+                self.execute_trade('SELL', self.current_position)
+                add_log(f"Sell order placed for {self.strategy_symbol}")
+            elif self.is_invested() and self.check_rebalance_needed():
+                # Rebalance if needed
+                self.rebalance_position()
+                add_log(f"Rebalanced position for {self.strategy_symbol}")
+            
+            
+            # Sleep until the next day
+            print(f"Sleeping until one day")
+            time.sleep(86400)  # Sleep for one day
+
             # Generate and execute signals
             self.process_signals()
             
-            # Sleep until the next day
-            time.sleep(86400)  # Sleep for one day
-                    
-    def fetch_latest_month(self):
-        """Fetch the latest month's closing price and update moving averages"""
-        contract = Stock(self.symbol, 'SMART', 'USD')
-        bars = self.ib.reqHistoricalData(
-            contract,
-            endDateTime='',
-            durationStr='1 M',
-            barSizeSetting='1 day',
-            whatToShow='MIDPOINT',
-            useRTH=True,
-            formatDate=1
-        )
-        latest_data = util.df(bars)
-        if not latest_data.empty:
-            latest_data.set_index('date', inplace=True)
-            # Append to daily data
-            self.daily_data = pd.concat([self.daily_data, latest_data])
-            # Resample to month end and recalculate EMA
-            self.calculate_moving_averages()
-            # Regenerate signals
-            self.generate_signals()
-            # Remap signals to daily data
-            self.map_signals_to_daily()
-            add_log(f"Fetched and updated latest month data for {self.strategy_symbol}")
+    def calculate_position_size(self):
+        """Calculate the position size based on the strategy's target weight"""
+        self.total_equity =  sum(float(entry.value) for entry in self.ib.accountSummary() if entry.tag == "EquityWithLoanValue")
+        target_value = self.total_equity * self.target_weight
+
         
-    def process_signals(self):
-        """Process the latest signal and execute trades accordingly"""
-        if len(self.daily_data) < self.ma_window:
-            add_log(f"Not enough data to generate signals for {self.strategy_symbol}")
-            return
-        
-        latest_signal = self.daily_data['Signal'].iloc[-1]
-        prev_signal = self.daily_data['Signal'].iloc[-2] if len(self.daily_data) >=2 else 0
-        position_change = latest_signal - prev_signal
-        
-        if position_change == 1 and self.last_signal != 1:
-            # Buy Signal
-            self.execute_trade('BUY', 1)
-            self.last_signal = 1
-            add_log(f"Buy signal generated for {self.strategy_symbol} on {self.daily_data.index[-1].date()}")
-            
-        elif position_change == -1 and self.last_signal != -1:
-            # Sell Signal
-            self.execute_trade('SELL', 1)
-            self.last_signal = -1
-            add_log(f"Sell signal generated for {self.strategy_symbol} on {self.daily_data.index[-1].date()}")
-        
+        current_price = self.ib.reqMktData(self.contract, '', False, False).marketPrice()
+        quantity = target_value / current_price
+        print(quantity)
+        return quantity
+    
     def execute_trade(self, action, quantity):
         """Execute a trade based on the action"""
         order_type = 'MKT'  # Market Order
-        contract = Stock(self.strategy_symbol, 'SMART', 'USD')
+        contract = Stock(self.symbol, 'SMART', 'USD')
         trade = self.trade_manager.trade(
             contract=contract,
             quantity=quantity if action == 'BUY' else -quantity,
