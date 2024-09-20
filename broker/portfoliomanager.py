@@ -291,28 +291,37 @@ class PortfolioManager:
         df['contract'] = df['contract'].astype(str)
         df['trade'] = df['trade'].astype(str)
         df['trade_context'] = df['trade_context'].astype(str)
-
+        print("this is our df before index conversion:  ")
+        print(df)
         # Convert index to datetime
         df.index = pd.to_datetime(df.index, errors='coerce')
+        print("this is our df after index conversion:  ")
+        print(df)
 
-        # Create the 'timestamp' column if it doesn't exist
-        if 'timestamp' not in df.columns:
-            df['timestamp'] = df.index
+        # if 'timestamp' in df.columns:
+        #     # Convert the 'timestamp' column to datetime
+        #     df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
 
-        # Convert the 'timestamp' column to datetime
-        df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+        #     # Compare index and 'timestamp' column, and keep the newer value
+        #     df['timestamp'] = df.apply(lambda row: max(row.name, row['timestamp']) if pd.notnull(row['timestamp']) else row.name, axis=1)
+        # else:
+        #     # If 'timestamp' column does not exist, create it from the index
+        #     df['timestamp'] = df.index
 
-        # Compare index and 'timestamp' column, and keep the newer value
-        df['timestamp'] = df.apply(lambda row: max(row.name, row['timestamp']) if pd.notnull(row['timestamp']) else row.name, axis=1)
+        # # Ensure all rows have a valid timestamp
+        # for idx, i in zip(df.index, range(0, len(df))):
+        #     try:
+        #         # Check if the timestamp is NaT or missing
+        #         if pd.isna(df.loc[idx, 'timestamp']):
+        #             # If timestamp is NaT or missing, generate a unique timestamp
+        #             df.loc[idx, 'timestamp'] = pd.Timestamp.now() + pd.to_timedelta(i, unit='ns')
+        #     except Exception as e:
+        #         print(f"Error occurred while saving: {e}")
+        #         print(f"Generating a unique timestamp for {df.loc[idx, 'timestamp']}")
+        #         df.loc[idx, 'timestamp'] = pd.Timestamp.now() + pd.to_timedelta(i, unit='ns')
 
-        # Ensure all rows have a valid timestamp
-        for idx, i in zip(df.index, range(0, len(df))):
-            if pd.isna(df.at[idx, 'timestamp']):
-                # If timestamp is NaT or missing, generate a unique timestamp
-                df.at[idx, 'timestamp'] = pd.Timestamp.now() + pd.to_timedelta(i, unit='ns')
-
-        # Set the 'timestamp' column as the index
-        df.set_index('timestamp', inplace=True, drop=True)
+        # # Set the 'timestamp' column as the index
+        # df.set_index('timestamp', inplace=True, drop=True)
 
         return df.sort_index()
     

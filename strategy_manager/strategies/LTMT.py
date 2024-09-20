@@ -183,35 +183,44 @@ class Strategy:
         # Check if the strategy is already invested
         self.update_investment_status()
         
+        last_run_date = None
+        
         while True:
-            latest_signal = self.daily_data['Signal'].iloc[-1]
+            current_date = datetime.now().date()
             
-            if not self.current_position and latest_signal == 1:
-                quantity = int(self.calculate_position_size())
-                print(quantity)
-                # Buy Signal
-                self.trade_manager.trade(self.contract,quantity=quantity,
-                                         order_type='MKT',
-                                         urgency='Patient', 
-                                         useRth=True)
+            # Run the strategy logic once per day
+            if current_date != last_run_date:
+                latest_signal = self.daily_data['Signal'].iloc[-1]
                 
-                add_log(f"Buy order placed for {self.strategy_symbol}")
-            elif self.is_invested() and latest_signal == 0:
-                # Sell Signal
-                self.execute_trade('SELL', self.current_position)
-                add_log(f"Sell order placed for {self.strategy_symbol}")
-            elif self.is_invested() and self.check_rebalance_needed():
-                # Rebalance if needed
-                self.rebalance_position()
-                add_log(f"Rebalanced position for {self.strategy_symbol}")
+                if not self.current_position and latest_signal == 1:
+                    # Buy Signal
+                    trade = self.trade_manager.trade(self.contract, quantity=10,
+                                             order_type='MKT',
+                                             urgency='Patient', 
+                                             useRth=True)
+                    
+                    add_log(f"Buy order placed for {self.strategy_symbol}")
+                    
+                    # Assign callbacks for order updates
+                    trade.fillEvent += self.on_fill
+                    trade.statusEvent += self.on_status_change
+                    
+                elif self.is_invested() and latest_signal == 0:
+                    # Sell Signal
+                    self.execute_trade('SELL', self.current_position)
+                    add_log(f"Sell order placed for {self.strategy_symbol}")
+                    
+                elif self.is_invested() and self.check_rebalance_needed():
+                    # Rebalance if needed
+                    self.rebalance_position()
+                    add_log(f"Rebalanced position for {self.strategy_symbol}")
+                
+                last_run_date = current_date
             
-            
-            # Sleep until the next day
-            print(f"Sleeping until one day")
-            time.sleep(86400)  # Sleep for one day
+            # Sleep for a short time before checking again
+            self.ib.sleep(60)  # Sleep for 1 minute
 
-            # Generate and execute signals
-            self.process_signals()
+
             
     def calculate_position_size(self):
         """Calculate the position size based on the strategy's target weight"""
