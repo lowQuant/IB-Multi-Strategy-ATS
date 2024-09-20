@@ -88,7 +88,7 @@ class Strategy:
 
         
         while True:
-            self.ib.sleep(0.1)
+            self.ib.sleep(20)
         # while True:
         #     # This integrates the ib_insync event loop
         #     if trade.orderStatus.status == "Cancelled":

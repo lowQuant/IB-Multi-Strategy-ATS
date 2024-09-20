@@ -92,6 +92,7 @@ class Strategy:
         """Fetch historical daily price data for the strategy symbol"""
         # Fetch historical daily data using IB API
         contract = Stock(self.symbol, 'SMART', 'USD')
+        self.ib.reqMarketDataType(4)
         bars = self.ib.reqHistoricalData(
             contract,
             endDateTime='',
@@ -102,6 +103,7 @@ class Strategy:
             formatDate=1
         )
         self.daily_data = util.df(bars)
+        print(self.daily_data)
         self.daily_data['date'] = pd.to_datetime(self.daily_data['date'])
         self.daily_data.set_index('date', inplace=True)
         print(f"Fetched {len(self.daily_data)} historical daily data points for {self.strategy_symbol}")
