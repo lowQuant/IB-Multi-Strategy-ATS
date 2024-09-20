@@ -92,6 +92,7 @@ class Strategy:
         """Fetch historical daily price data for the strategy symbol"""
         # Fetch historical daily data using IB API
         contract = Stock(self.symbol, 'SMART', 'USD')
+        self.ib.reqMarketDataType(4)
         bars = self.ib.reqHistoricalData(
             contract,
             endDateTime='',
@@ -102,6 +103,7 @@ class Strategy:
             formatDate=1
         )
         self.daily_data = util.df(bars)
+        print(self.daily_data)
         self.daily_data['date'] = pd.to_datetime(self.daily_data['date'])
         self.daily_data.set_index('date', inplace=True)
         print(f"Fetched {len(self.daily_data)} historical daily data points for {self.strategy_symbol}")
@@ -187,10 +189,11 @@ class Strategy:
             latest_signal = self.daily_data['Signal'].iloc[-1]
             
             if not self.current_position and latest_signal == 1:
-                quantity = int(self.calculate_position_size())
-                print(quantity)
+                print(f"Current position: {self.current_position}")
+                # quantity = int(self.calculate_position_size())
+                # print(quantity)
                 # Buy Signal
-                self.trade_manager.trade(self.contract,quantity=quantity,
+                trade = self.trade_manager.trade(self.contract,quantity=10,
                                          order_type='MKT',
                                          urgency='Patient', 
                                          useRth=True)
@@ -205,13 +208,13 @@ class Strategy:
                 self.rebalance_position()
                 add_log(f"Rebalanced position for {self.strategy_symbol}")
             
-            
+            # Assign callbacks for order updates
+            trade.fillEvent += self.on_fill
+            trade.statusEvent += self.on_status_change
+
             # Sleep until the next day
             print(f"Sleeping until one day")
-            time.sleep(86400)  # Sleep for one day
-
-            # Generate and execute signals
-            self.process_signals()
+            self.ib.sleep(86400)  # Sleep for one day
             
     def calculate_position_size(self):
         """Calculate the position size based on the strategy's target weight"""
