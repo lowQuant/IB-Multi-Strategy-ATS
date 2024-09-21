@@ -279,10 +279,10 @@ class PortfolioManager:
         try:       
             if self.account_id in self.portfolio_library.list_symbols():
                 print(f"Updating arcticdb entry {self.account_id} in library 'portfolio'")
-                self.portfolio_library.update(f'{self.account_id}', df_merged,prune_previous_versions=True,upsert=True)
+                self.portfolio_library.update(f'{self.account_id}', df_merged,prune_previous_versions=True,upsert=True,validate_index=True)
             else:
                 print(f"Creating an arcticdb entry {self.account_id} in library 'portfolio'")
-                self.portfolio_library.write(f'{self.account_id}',df_merged,prune_previous_versions = True)#,  validate_index=True)
+                self.portfolio_library.write(f'{self.account_id}',df_merged,prune_previous_versions = True,validate_index=True)
         except Exception as e:
             print(f"Error occured while saving: {e}")
 
@@ -294,25 +294,7 @@ class PortfolioManager:
 
         # Convert index to datetime
         df.index = pd.to_datetime(df.index, errors='coerce')
-
-        # # Create the 'timestamp' column if it doesn't exist
-        # if 'timestamp' not in df.columns:
-        #     df['timestamp'] = df.index
-
-        # # Convert the 'timestamp' column to datetime
-        # df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
-
-        # # Compare index and 'timestamp' column, and keep the newer value
-        # df['timestamp'] = df.apply(lambda row: max(row.name, row['timestamp']) if pd.notnull(row['timestamp']) else row.name, axis=1)
-
-        # # Ensure all rows have a valid timestamp
-        # for idx, i in zip(df.index, range(0, len(df))):
-        #     if pd.isna(df.at[idx, 'timestamp']):
-        #         # If timestamp is NaT or missing, generate a unique timestamp
-        #         df.at[idx, 'timestamp'] = pd.Timestamp.now() + pd.to_timedelta(i, unit='ns')
-
-        # # Set the 'timestamp' column as the index
-        # df.set_index('timestamp', inplace=True, drop=True)
+        df.index.name = 'timestamp'  # Explicitly set the index name
 
         return df.sort_index()
     
