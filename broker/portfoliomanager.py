@@ -99,16 +99,16 @@ class PortfolioManager:
             strategy_entries_in_ac = df_ac[(df_ac['symbol'] == symbol) & (df_ac['asset class'] == asset_class)]
             
             if strategy_entries_in_ac.empty: # no database entry, add position
-                print(f"{asset_class}:{symbol} not in ArcticDB. Appending df_ib row to df_merged")
+                # print(f"{asset_class}:{symbol} not in ArcticDB. Appending df_ib row to df_merged")
                 df_merged = pd.concat([df_merged, pd.DataFrame([row])])
             else:
                 strategy_entry_updated = self.update_and_aggregate_data(strategy_entries_in_ac, row)
-                print(f"{asset_class}:{symbol} in ArcticDB. Updated and aggregating data")
+                # print(f"{asset_class}:{symbol} in ArcticDB. Updated and aggregating data")
                 df_merged = pd.concat([df_merged, strategy_entry_updated])
                 
                 if row['position'] - strategy_entry_updated.position.sum() != 0:
                     # Handle the residual and concat to df_merged
-                    print(f"{asset_class}:{symbol} IB position does not equal ArcticDB's Position")
+                    # print(f"{asset_class}:{symbol} IB position does not equal ArcticDB's Position")
                     residual = self.handle_residual(strategy_entries_in_ac, row)
                     df_merged = pd.concat([df_merged, residual])
  
@@ -279,10 +279,10 @@ class PortfolioManager:
         try:       
             if self.account_id in self.portfolio_library.list_symbols():
                 print(f"Updating arcticdb entry {self.account_id} in library 'portfolio'")
-                self.portfolio_library.update(f'{self.account_id}', df_merged,prune_previous_versions=True,upsert=True)
+                self.portfolio_library.update(f'{self.account_id}', df_merged,prune_previous_versions=True,upsert=True,validate_index=True)
             else:
                 print(f"Creating an arcticdb entry {self.account_id} in library 'portfolio'")
-                self.portfolio_library.write(f'{self.account_id}',df_merged,prune_previous_versions = True)#,  validate_index=True)
+                self.portfolio_library.write(f'{self.account_id}',df_merged,prune_previous_versions = True,validate_index=True)
         except Exception as e:
             print(f"Error occured while saving: {e}")
 
@@ -294,25 +294,7 @@ class PortfolioManager:
 
         # Convert index to datetime
         df.index = pd.to_datetime(df.index, errors='coerce')
-
-        # Create the 'timestamp' column if it doesn't exist
-        if 'timestamp' not in df.columns:
-            df['timestamp'] = df.index
-
-        # Convert the 'timestamp' column to datetime
-        df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
-
-        # Compare index and 'timestamp' column, and keep the newer value
-        df['timestamp'] = df.apply(lambda row: max(row.name, row['timestamp']) if pd.notnull(row['timestamp']) else row.name, axis=1)
-
-        # Ensure all rows have a valid timestamp
-        for idx, i in zip(df.index, range(0, len(df))):
-            if pd.isna(df.at[idx, 'timestamp']):
-                # If timestamp is NaT or missing, generate a unique timestamp
-                df.at[idx, 'timestamp'] = pd.Timestamp.now() + pd.to_timedelta(i, unit='ns')
-
-        # Set the 'timestamp' column as the index
-        df.set_index('timestamp', inplace=True, drop=True)
+        df.index.name = 'timestamp'  # Explicitly set the index name
 
         return df.sort_index()
     
@@ -350,8 +332,9 @@ class PortfolioManager:
     def process_new_trade(self, strategy_symbol, trade):
             '''Function that processes an ib_insync trade object and stores it in the ArcticDB'''
             # Create a Dataframe compatible with our ArcticDB data structure
+            print(trade)
             trade_df = create_trade_entry(self,strategy_symbol, trade)
-
+            print(trade_df)
             # Check for duplicate trades and exit function if True
             if detect_duplicate_trade(self,trade):
                 return
@@ -471,3 +454,5 @@ class PortfolioManager:
         df_merged['trade'] = trade_df['trade'].iloc[0]
         return df_merged
 
+    def delete_portfolio_library(self):
+        self.portfolio_library.delete(self.account_id)

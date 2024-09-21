@@ -7,6 +7,7 @@ from data_and_research import get_strategy_allocation_bounds, get_strategy_symbo
 from broker.trademanager import TradeManager
 from broker import connect_to_IB, disconnect_from_IB
 from broker.functions import get_term_structure
+from broker import connect_to_IB, disconnect_from_IB
 from gui.log import add_log, start_event
 
 PARAMS = {"VIX Threshold": 16.5, "Contango":True}
@@ -220,10 +221,11 @@ class Strategy:
 
     def update_investment_status(self):
         """ Update the investment status of the strategy """
-        self.current_weight = self.check_investment_weight(self, symbol=self.instrument_symbol)
-        self.invested = bool(self.current_weight)
         self.equity = sum(float(entry.value) for entry in self.ib.accountSummary() if entry.tag == "EquityWithLoanValue")
         self.cash = sum(float(entry.value) for entry in self.ib.accountSummary() if entry.tag == "AvailableFunds")
+        self.current_weight = self.check_investment_weight(self, symbol=self.instrument_symbol)
+        self.invested = bool(self.current_weight)
+
 
     def update_invested_contract(self):
         """ Update the currently invested contract """

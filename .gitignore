@@ -410,5 +410,5 @@ logs/jobs/
 .DS_Store
 
 # ignore setup folder
-.IB_Multi_Strategy_ATS.egg-info
+/IB_Multi_Strategy_ATS.egg-info
 

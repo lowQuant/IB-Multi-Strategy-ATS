@@ -173,11 +173,13 @@ def update_params_in_db(strategy_symbol, params):
 
 def get_strategy_symbol(filename):
     try:
+        print(f"Attempting to get strategy symbol for filename: {filename}")
         lib = ac.get_library('general')
         df = lib.read("strategies").data
         symbol = df[df.filename == filename].index.item()  # Using .item() to get the actual symbol
         return symbol
     except Exception as e:
+        print(f"Retrieved symbol: {symbol}")  # Add this line before returning
         print(f"Error retrieving strategy symbol: {e}")
         return None
 
