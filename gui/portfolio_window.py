@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, simpledialog
 import pandas as pd
 from datetime import datetime
 from data_and_research import ac, fetch_strategies
@@ -129,6 +129,9 @@ def populate_portfolio_tab(window,strategy_manager,portfolio_tab,info_and_contro
         reset_button = tk.Button(info_and_controls_frame, text="Reset", command=lambda: reset_portfolio(strategy_manager))
         reset_button.pack(side=tk.RIGHT, padx=5)
 
+        sim_trade_button = tk.Button(info_and_controls_frame, text="Sim Trade", command=lambda: _sim_trade(strategy_manager))
+        sim_trade_button.pack(side=tk.RIGHT, padx=5)
+
         # Add a strategy dropdown for each row in a separate column
         def on_strategy_cell_click(event, strategies, df):
             region = tree.identify("region", event.x, event.y)
@@ -170,6 +173,28 @@ def populate_portfolio_tab(window,strategy_manager,portfolio_tab,info_and_contro
         tree.bind("<Button-3>", lambda e: on_right_click(e, tree, df,strategy_manager))
         scrollbar.config(command=tree.yview)
 
+    def _sim_trade(strategy_manager):
+        # Ask for strategy
+        strategy = simpledialog.askstring("Input", "Enter strategy symbol:")
+        if not strategy:
+            return
+
+        # Ask for symbol
+        symbol = simpledialog.askstring("Input", "Enter symbol:")
+        if not symbol:
+            return
+
+        # Ask for quantity
+        qty = simpledialog.askinteger("Input", "Enter quantity:")
+        if qty is None:
+            return
+
+        # Confirm the inputs
+        confirm = tk.messagebox.askyesno("Confirm", f"Create fake trade:\nStrategy: {strategy}\nSymbol: {symbol}\nQuantity: {qty}")
+        if not confirm:
+            return
+        strategy_manager.portfolio_manager._create_strategy_entry_in_portfolio_lib_(strategy,symbol,qty)
+        
     def reset_portfolio(strategy_manager):
         # Ask for confirmation before resetting the portfolio
         confirm = tk.messagebox.askyesno("Confirm Reset", "Are you sure you want to reset the entire portfolio? This action cannot be undone and may take some time.")
