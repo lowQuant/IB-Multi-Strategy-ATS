@@ -110,7 +110,11 @@ class PortfolioManager:
                     # Handle the residual and concat to df_merged
                     # print(f"{asset_class}:{symbol} IB position does not equal ArcticDB's Position")
                     residual = self.handle_residual(strategy_entries_in_ac, row)
+                    print("this is df_merged before concatenating the residual: ")
+                    print(df_merged)
                     df_merged = pd.concat([df_merged, residual])
+                    print("this is df_merged after concatenating the residual: ")
+                    print(df_merged)
  
         # Now, handle ArcticDB positions that aren't represented in the broker's data (e.g., strategies with net-zero positions)
         for _, row in df_ac.iterrows():
@@ -247,7 +251,9 @@ class PortfolioManager:
             'fx_rate': row.fx_rate}
 
         df = pd.DataFrame([residual_row])
-        return df.set_index('timestamp', inplace=True)
+        df.set_index('timestamp', inplace=True)
+        print(f"this is the residual df: {df}")
+        return df
 
     def load_portfolio_from_adb(self):
         '''Function that loads latest saved portfolio from ArcticDB'''
@@ -268,57 +274,101 @@ class PortfolioManager:
         return latest_portfolio
 
     def save_portfolio(self, df_merged):
-        '''Function that saves all positions in ArcticDB in portfolio/"account_id".'''
+        """
+        Save the portfolio DataFrame to ArcticDB after normalization.
+
+        Steps:
+        1. Check if DataFrame is empty.
+        2. Normalize the DataFrame columns.
+        3. Drop rows where the position is zero.
+        4. Save to ArcticDB using append or write based on existence.
+        """
         if df_merged.empty:
+            print("DataFrame is empty. Nothing to save.")
             return
-        df_merged = self.normalize_columns(df_merged)
 
-        # Drop rows where the position is zero
-        df_merged = df_merged[df_merged['position'] != 0]
+        try:
+            # Step 2: Normalize columns before saving
+            df_merged = self.normalize_columns(df_merged)
 
-        try:       
+            # Step 3: Drop rows where the position is zero
+            df_merged = df_merged[df_merged['position'] != 0]
+
+            # Step 4: Save to ArcticDB
             if self.account_id in self.portfolio_library.list_symbols():
-                print(f"Updating arcticdb entry {self.account_id} in library 'portfolio'")
-                self.portfolio_library.update(f'{self.account_id}', df_merged,prune_previous_versions=True,upsert=True)
+                print(f"Updating ArcticDB entry {self.account_id} in library 'portfolio'")
+                # Use 'append' with 'validate_index=True' to ensure no duplicate indices
+                self.portfolio_library.append(f'{self.account_id}', df_merged, validate_index=True)
             else:
-                print(f"Creating an arcticdb entry {self.account_id} in library 'portfolio'")
-                self.portfolio_library.write(f'{self.account_id}',df_merged,prune_previous_versions = True)#,  validate_index=True)
+                print(f"Creating an ArcticDB entry {self.account_id} in library 'portfolio'")
+                self.portfolio_library.write(f'{self.account_id}', df_merged, prune_previous_versions=True)
+
         except Exception as e:
-            print(f"Error occured while saving: {e}")
+            print(f"Error occurred while saving: {e}")
 
     def normalize_columns(self, df):
+        """
+        Normalize the DataFrame columns, ensure 'timestamp' is unique and set as index.
+
+        Steps:
+        1. Reset index to ensure 'timestamp' is a column.
+        2. Convert 'timestamp' column to datetime.
+        3. Fill missing 'timestamp' values with index values.
+        4. Ensure all timestamps are unique by adding incremental nanoseconds to duplicates.
+        5. Set 'timestamp' as the DataFrame's index.
+        6. Drop 'timestamp' from columns to prevent duplication.
+        """
         df = df.copy()
-        df['contract'] = df['contract'].astype(str)
-        df['trade'] = df['trade'].astype(str)
-        df['trade_context'] = df['trade_context'].astype(str)
-        print("this is our df before index conversion:  ")
+
+        # Step 1: Reset index to make 'timestamp' a column if it's currently an index
+        if 'timestamp' in df.index.names:
+            df = df.reset_index()
+
+        # Step 2: Convert specific columns to string
+        string_columns = ['contract', 'trade', 'trade_context']
+        for col in string_columns:
+            if col in df.columns:
+                df[col] = df[col].astype(str)
+            else:
+                df[col] = ''  # Initialize missing columns with empty strings
+
+        # Step 3: Convert 'timestamp' to datetime
+        if 'timestamp' in df.columns:
+            df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+        else:
+            df['timestamp'] = pd.NaT  # Assign NaT if 'timestamp' doesn't exist
+
+        # Step 4: Fill NaT in 'timestamp' with index values
+        if not pd.api.types.is_datetime64_any_dtype(df.index):
+            # Convert index to datetime if it's not already
+            df.index = pd.to_datetime(df.index, errors='coerce')
+
+        # Create a Series from the index to fill NaT values
+        index_series = pd.Series(df.index, index=df.index)
+        df['timestamp'] = df['timestamp'].fillna(index_series)
+
+        # Step 5: Ensure all timestamps are unique
+        # Identify duplicate timestamps
+        duplicated = df['timestamp'].duplicated(keep=False)
+        if duplicated.any():
+            # Add incremental nanoseconds to duplicates to make them unique
+            df.loc[duplicated, 'timestamp'] += pd.to_timedelta(df.loc[duplicated].groupby('timestamp').cumcount(), unit='ns')
+
+        # Final check to ensure no duplicate timestamps remain
+        if df['timestamp'].duplicated().any():
+            raise ValueError("Duplicate timestamps detected even after adjustment.")
+
+        # Step 6: Set 'timestamp' as the index and drop it from columns
+        df.set_index('timestamp', inplace=True, drop=True)
+
+        # Ensure 'timestamp' is no longer in columns
+        if 'timestamp' in df.columns:
+            df = df.drop(columns=['timestamp'])
+
+        print("this is our df after index conversion:")
         print(df)
-        # Convert index to datetime
-        df.index = pd.to_datetime(df.index, errors='coerce')
-        print("this is our df after index conversion:  ")
-        print(df)
-
-        # # Create the 'timestamp' column if it doesn't exist
-        # if 'timestamp' not in df.columns:
-        #     df['timestamp'] = df.index
-
-        # # Convert the 'timestamp' column to datetime
-        # df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
-
-        # # Compare index and 'timestamp' column, and keep the newer value
-        # df['timestamp'] = df.apply(lambda row: max(row.name, row['timestamp']) if pd.notnull(row['timestamp']) else row.name, axis=1)
-
-        # # Ensure all rows have a valid timestamp
-        # for idx, i in zip(df.index, range(0, len(df))):
-        #     if pd.isna(df.at[idx, 'timestamp']):
-        #         # If timestamp is NaT or missing, generate a unique timestamp
-        #         df.at[idx, 'timestamp'] = pd.Timestamp.now() + pd.to_timedelta(i, unit='ns')
-
-        # # Set the 'timestamp' column as the index
-        # df.set_index('timestamp', inplace=True, drop=True)
 
         return df.sort_index()
-    
     def save_account_pnl(self):
         """Saves the PnL (equity value) to the ArcticDB."""
         current_time = datetime.datetime.now().replace(second=0, microsecond=0)
@@ -353,15 +403,11 @@ class PortfolioManager:
     def process_new_trade(self, strategy_symbol, trade):
             '''Function that processes an ib_insync trade object and stores it in the ArcticDB'''
             # Create a Dataframe compatible with our ArcticDB data structure
-            print(trade)
             trade_df = create_trade_entry(self,strategy_symbol, trade)
-            print(trade_df)
+            
             # Check for duplicate trades and exit function if True
             if detect_duplicate_trade(self,trade):
                 return
-
-            symbol = trade.contract.symbol
-            asset_class = trade.contract.secType
 
             # Read the current portfolio data
             if self.account_id in self.portfolio_library.list_symbols():
@@ -369,6 +415,8 @@ class PortfolioManager:
             else:
                 df_ac_active = pd.DataFrame()
 
+            symbol = trade.contract.symbol
+            asset_class = trade.contract.secType
             existing_position = df_ac_active[(df_ac_active['symbol'] == symbol) & (df_ac_active['asset class'] == asset_class) 
                                             & (df_ac_active['strategy'] == strategy_symbol)]
     

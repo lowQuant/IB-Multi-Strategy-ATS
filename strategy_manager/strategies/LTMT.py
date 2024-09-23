@@ -196,7 +196,7 @@ class Strategy:
                 
                 if not self.current_position and latest_signal == 1:
                     # Buy Signal
-                    trade = self.trade_manager.trade(self.contract, quantity=10,
+                    trade = self.trade_manager.trade(self.contract, quantity=-11,
                                              order_type='MKT',
                                              urgency='Patient', 
                                              useRth=True)
