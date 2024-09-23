@@ -18,7 +18,7 @@ def open_settings_window(main_window):
     
     settings_window = Toplevel(main_window)
     settings_window.title("Settings")
-    settings_window.geometry("520x585")
+    settings_window.geometry("650x585")
 
     tab_control = ttk.Notebook(settings_window)
     general_tab = Frame(tab_control)

@@ -300,9 +300,8 @@ class PortfolioManager:
                 # Use 'append' with 'validate_index=True' to ensure no duplicate indices
                 self.portfolio_library.append(f'{self.account_id}', df_merged, validate_index=True)
             else:
-                print(f"Creating an ArcticDB entry {self.account_id} in library 'portfolio'")
-                self.portfolio_library.write(f'{self.account_id}', df_merged, prune_previous_versions=True)
-
+                print(f"Creating an arcticdb entry {self.account_id} in library 'portfolio'")
+                self.portfolio_library.write(f'{self.account_id}',df_merged,prune_previous_versions = True,validate_index=True)
         except Exception as e:
             print(f"Error occurred while saving: {e}")
 
@@ -320,53 +319,24 @@ class PortfolioManager:
         """
         df = df.copy()
 
-        # Step 1: Reset index to make 'timestamp' a column if it's currently an index
-        if 'timestamp' in df.index.names:
-            df = df.reset_index()
+        # Convert critical columns to string
+        df['contract'] = df['contract'].astype(str)
+        df['trade'] = df['trade'].astype(str)
+        df['trade_context'] = df['trade_context'].astype(str)
 
-        # Step 2: Convert specific columns to string
-        string_columns = ['contract', 'trade', 'trade_context']
-        for col in string_columns:
-            if col in df.columns:
-                df[col] = df[col].astype(str)
-            else:
-                df[col] = ''  # Initialize missing columns with empty strings
+        # Convert critical columns to float
+        df['position'] = df['position'].astype(float)
+        df['averageCost'] = df['averageCost'].astype(float)
+        df['marketPrice'] = df['marketPrice'].astype(float)
+        df['marketValue'] = df['marketValue'].astype(float)
+        df['unrealizedPNL'] = df['unrealizedPNL'].astype(float)
+        df['realizedPNL'] = df['realizedPNL'].astype(float)
+        df['pnl %'] = df['pnl %'].astype(float)
+        df['% of nav'] = df['% of nav'].astype(float)
 
-        # Step 3: Convert 'timestamp' to datetime
-        if 'timestamp' in df.columns:
-            df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
-        else:
-            df['timestamp'] = pd.NaT  # Assign NaT if 'timestamp' doesn't exist
-
-        # Step 4: Fill NaT in 'timestamp' with index values
-        if not pd.api.types.is_datetime64_any_dtype(df.index):
-            # Convert index to datetime if it's not already
-            df.index = pd.to_datetime(df.index, errors='coerce')
-
-        # Create a Series from the index to fill NaT values
-        index_series = pd.Series(df.index, index=df.index)
-        df['timestamp'] = df['timestamp'].fillna(index_series)
-
-        # Step 5: Ensure all timestamps are unique
-        # Identify duplicate timestamps
-        duplicated = df['timestamp'].duplicated(keep=False)
-        if duplicated.any():
-            # Add incremental nanoseconds to duplicates to make them unique
-            df.loc[duplicated, 'timestamp'] += pd.to_timedelta(df.loc[duplicated].groupby('timestamp').cumcount(), unit='ns')
-
-        # Final check to ensure no duplicate timestamps remain
-        if df['timestamp'].duplicated().any():
-            raise ValueError("Duplicate timestamps detected even after adjustment.")
-
-        # Step 6: Set 'timestamp' as the index and drop it from columns
-        df.set_index('timestamp', inplace=True, drop=True)
-
-        # Ensure 'timestamp' is no longer in columns
-        if 'timestamp' in df.columns:
-            df = df.drop(columns=['timestamp'])
-
-        print("this is our df after index conversion:")
-        print(df)
+        # Convert index to datetime, set the index name
+        df.index = pd.to_datetime(df.index, errors='coerce')
+        df.index.name = 'timestamp'  # Explicitly set the index name
 
         return df.sort_index()
     def save_account_pnl(self):

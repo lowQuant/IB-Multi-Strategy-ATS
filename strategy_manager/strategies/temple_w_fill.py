@@ -1,5 +1,5 @@
 from ib_async import *
-import asyncio, time
+import asyncio, time, sys, traceback
 from broker.trademanager import TradeManager
 from broker import connect_to_IB, disconnect_from_IB
 from data_and_research import get_strategy_allocation_bounds, get_strategy_symbol
@@ -8,7 +8,7 @@ from gui.log import add_log
 PARAMS = {}
 strategy = None
 
-def manage_strategy(client_id, strategy_manager):
+def manage_strategy(client_id, strategy_manager, strategy_loops):
     try:
         # Create a new event loop for this thread
         loop = asyncio.new_event_loop()
@@ -17,17 +17,34 @@ def manage_strategy(client_id, strategy_manager):
         # Instantiate the Strategy class
         global strategy
         strategy = Strategy(client_id, strategy_manager)
+        strategy.start()
         add_log(f"Thread Started [{strategy.strategy_symbol}]")
-        strategy.run()
+
+        # Store the loop in the shared dictionary for later reference
+        strategy_loops[client_id] = loop
+
+        loop.run_forever()
 
     except Exception as e:
-        # Handle exceptions
-        print(f"Error when instantiating: {e}")
+        # Get the current exception information
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        
+        # Extract the last frame (most recent call) from the traceback
+        tb_frame = traceback.extract_tb(exc_traceback)[-1]
+        filename = tb_frame.filename
+        line_number = tb_frame.lineno
+        
+        # Print detailed error information
+        print(f"Error in {filename}, line {line_number}: {str(e)}")
+        print("Full traceback:")
+        traceback.print_exc()
 
-    finally:
+    finally: 
         # Clean up
-        disconnect_from_IB(strategy.ib, strategy.strategy_symbol)
+        disconnect()
         loop.close()
+        # Remove the loop reference from the shared dictionary
+        del strategy_loops[client_id]
 
 def disconnect():
     strategy.disconnect()
@@ -70,7 +87,9 @@ class Strategy:
             'status': trade.orderStatus.status,
             'info': f'Status Change message sent from {self.strategy_symbol}'
         })
-
+    def start(self):
+        self.run()
+    
     def run(self):
         # Add Trading logic
 

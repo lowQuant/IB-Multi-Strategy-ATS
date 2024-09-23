@@ -560,7 +560,7 @@ class DatabaseWindow:
             # Derive log file path: same directory, base filename with .txt extension
             base_name = os.path.splitext(file_path)[0]
             log_file = f"{base_name}.txt"
-            log_file_path = os.path.join(repo_dir,"data_and_research","logs","jobs",file.split(".")[0]+".txt")
+            log_file_path = os.path.join(repo_dir,"data_and_research","jobs","logs",file.split(".")[0]+".txt")
             print(log_file_path)
 
             # Add the cron job with the full path to Python interpreter and logging
