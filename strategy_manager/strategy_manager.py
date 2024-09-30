@@ -19,6 +19,7 @@ class StrategyManager:
         print("instantiated StrategyManager")
         self.ib_client = connect_to_IB(clientid=self.clientId)
         self.strategy_threads = []
+        self.strategy_loops = {}  # New dictionary to store event loops
         self.strategies = []
         self.trade_manager = TradeManager(ib_client=self.ib_client,strategy_manager=self)
         self.portfolio_manager = PortfolioManager(ib_client=self.ib_client)
@@ -140,7 +141,7 @@ class StrategyManager:
         for strategy_module in self.strategies:
             if hasattr(strategy_module, 'manage_strategy'):
                 self.clientId += 1
-                thread = threading.Thread(target=strategy_module.manage_strategy, args=(self.clientId,self))
+                thread = threading.Thread(target=strategy_module.manage_strategy, args=(self.clientId,self,self.strategy_loops))
                 thread.daemon = True
                 thread.start()
                 self.strategy_threads.append(thread)
@@ -157,8 +158,35 @@ class StrategyManager:
 
     def stop_all(self):
         """ Stop all running strategies and threads. """
+        # Stop each strategy's loop
+        for client_id, loop in self.strategy_loops.items():
+            print(f"Stopping strategy {client_id}...")
+            # add_log(f"Stopping strategy {client_id}...")
+            loop.call_soon_threadsafe(loop.stop)  # This will cause loop.run_forever() to exit
+
+        # Wait for all strategy threads to finish
         for thread in self.strategy_threads:
-            thread.join(timeout=5)
-        self.stop_message_queue()
+            thread.join(timeout=10)
+            if thread.is_alive():
+                print(f"Strategy thread {thread.name} did not terminate in time.")
+                # add_log(f"Strategy thread {thread.name} did not terminate in time.")
+            else:
+                print(f"Strategy thread {thread.name} has terminated.")
+                # add_log(f"Strategy thread {thread.name} has terminated.")
+
+        # Clear the strategy-related lists
         self.strategy_threads = []
         self.strategies = []
+        self.strategy_loops = {}
+
+        # Stop the message processing thread
+        self.stop_message_queue()
+        # add_log("All strategies stopped.")
+
+    def get_orders(self):
+        return self.ib_client.orders()
+
+    def get_open_orders(self):
+        return self.ib_client.openOrders()
+
+

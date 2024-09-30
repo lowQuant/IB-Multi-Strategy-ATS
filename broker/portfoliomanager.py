@@ -279,7 +279,7 @@ class PortfolioManager:
         try:       
             if self.account_id in self.portfolio_library.list_symbols():
                 print(f"Updating arcticdb entry {self.account_id} in library 'portfolio'")
-                self.portfolio_library.update(f'{self.account_id}', df_merged,prune_previous_versions=True,upsert=True,validate_index=True)
+                self.portfolio_library.update(f'{self.account_id}', df_merged,prune_previous_versions=True,upsert=True)
             else:
                 print(f"Creating an arcticdb entry {self.account_id} in library 'portfolio'")
                 self.portfolio_library.write(f'{self.account_id}',df_merged,prune_previous_versions = True,validate_index=True)
@@ -288,11 +288,23 @@ class PortfolioManager:
 
     def normalize_columns(self, df):
         df = df.copy()
+
+        # Convert critical columns to string
         df['contract'] = df['contract'].astype(str)
         df['trade'] = df['trade'].astype(str)
         df['trade_context'] = df['trade_context'].astype(str)
 
-        # Convert index to datetime
+        # Convert critical columns to float
+        df['position'] = df['position'].astype(float)
+        df['averageCost'] = df['averageCost'].astype(float)
+        df['marketPrice'] = df['marketPrice'].astype(float)
+        df['marketValue'] = df['marketValue'].astype(float)
+        df['unrealizedPNL'] = df['unrealizedPNL'].astype(float)
+        df['realizedPNL'] = df['realizedPNL'].astype(float)
+        df['pnl %'] = df['pnl %'].astype(float)
+        df['% of nav'] = df['% of nav'].astype(float)
+
+        # Convert index to datetime, set the index name
         df.index = pd.to_datetime(df.index, errors='coerce')
         df.index.name = 'timestamp'  # Explicitly set the index name
 

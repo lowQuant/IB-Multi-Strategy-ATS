@@ -173,7 +173,6 @@ def update_params_in_db(strategy_symbol, params):
 
 def get_strategy_symbol(filename):
     try:
-        print(f"Attempting to get strategy symbol for filename: {filename}")
         lib = ac.get_library('general')
         df = lib.read("strategies").data
         symbol = df[df.filename == filename].index.item()  # Using .item() to get the actual symbol
@@ -195,7 +194,7 @@ def get_strategy_allocation_bounds(strategy_symbol):
             print(f"Invalid weight values for strategy {strategy_symbol}")
             return 0.0, 0.0, 0.0  # Default values
 
-        print(f"The Allocation bounds are target:{target_weight}, min:{min_weight}, max:{max_weight}")
+        # print(f"The Allocation bounds are target:{target_weight}, min:{min_weight}, max:{max_weight}")
         return float(target_weight), float(min_weight), float(max_weight)
     else:
         print(f"Strategy {strategy_symbol} not found in the database.")

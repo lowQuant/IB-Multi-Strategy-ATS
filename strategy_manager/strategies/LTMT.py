@@ -1,7 +1,7 @@
 # Long Term Market Timing Strategy (LTMT)
 
 from ib_async import *
-import asyncio, time, traceback, sys
+import asyncio, time, traceback, sys, math
 from broker.trademanager import TradeManager
 from broker import connect_to_IB, disconnect_from_IB
 from data_and_research import get_strategy_allocation_bounds, get_strategy_symbol, fetch_strategy_params
@@ -9,13 +9,14 @@ from gui.log import add_log
 import pandas as pd
 import numpy as np
 from datetime import datetime
-
+import yfinance as yf
 PARAMS = {'symbol': 'ACWI','symbol_currency': 'USD','symbol_exchange': 'SMART',
+          'yfinance_symbol': 'IUSQ.DE',
           'ma_window': 10}
 
 strategy = None
 
-def manage_strategy(client_id, strategy_manager):
+def manage_strategy(client_id, strategy_manager, strategy_loops):
     try:
         # Create a new event loop for this thread
         loop = asyncio.new_event_loop()
@@ -24,27 +25,34 @@ def manage_strategy(client_id, strategy_manager):
         # Instantiate the Strategy class
         global strategy
         strategy = Strategy(client_id, strategy_manager)
+        strategy.start()
         add_log(f"Thread Started [{strategy.strategy_symbol}]")
-        strategy.run()
+
+        # Store the loop in the shared dictionary for later reference
+        strategy_loops[client_id] = loop
+
+        loop.run_forever()
 
     except Exception as e:
-            # Get the current exception information
-            exc_type, exc_value, exc_traceback = sys.exc_info()
-            
-            # Extract the last frame (most recent call) from the traceback
-            tb_frame = traceback.extract_tb(exc_traceback)[-1]
-            filename = tb_frame.filename
-            line_number = tb_frame.lineno
-            
-            # Print detailed error information
-            print(f"Error in {filename}, line {line_number}: {str(e)}")
-            print("Full traceback:")
-            traceback.print_exc()
+        # Get the current exception information
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        
+        # Extract the last frame (most recent call) from the traceback
+        tb_frame = traceback.extract_tb(exc_traceback)[-1]
+        filename = tb_frame.filename
+        line_number = tb_frame.lineno
+        
+        # Print detailed error information
+        print(f"Error in {filename}, line {line_number}: {str(e)}")
+        print("Full traceback:")
+        traceback.print_exc()
 
     finally: 
         # Clean up
-        disconnect_from_IB(strategy.ib, strategy.strategy_symbol)
+        disconnect()
         loop.close()
+        # Remove the loop reference from the shared dictionary
+        del strategy_loops[client_id]
 
 def disconnect():
     if strategy:
@@ -58,8 +66,6 @@ class Strategy:
         self.filename = self.__class__.__module__ +".py"
         self.strategy_symbol = get_strategy_symbol(self.filename)
 
-        # Get Data on Strategy Initialization
-        # Connect to Interactive Brokers
         self.ib = connect_to_IB(clientid=self.client_id, symbol=self.strategy_symbol)
         self.trade_manager = TradeManager(self.ib, self.strategy_manager)
         
@@ -74,7 +80,8 @@ class Strategy:
         self.symbol_currency = self.params['symbol_currency']
         self.symbol_exchange = self.params['symbol_exchange']
         self.ma_window = int(self.params['ma_window'])
-        
+        self.yfinance_symbol = self.params['yfinance_symbol']
+
         # DataFrames to store historical prices and signals
         self.daily_data = pd.DataFrame()
         self.monthly_data = pd.DataFrame()
@@ -91,38 +98,46 @@ class Strategy:
     def fetch_historical_data(self):
         """Fetch historical daily price data for the strategy symbol"""
         # Fetch historical daily data using IB API
-        contract = Stock(self.symbol, 'SMART', 'USD')
-        self.ib.reqMarketDataType(4)
-        bars = self.ib.reqHistoricalData(
-            contract,
-            endDateTime='',
-            durationStr='10 Y',
-            barSizeSetting='1 day',
-            whatToShow='MIDPOINT',
-            useRTH=True,
-            formatDate=1
-        )
-        self.daily_data = util.df(bars)
-        print(self.daily_data)
-        self.daily_data['date'] = pd.to_datetime(self.daily_data['date'])
-        self.daily_data.set_index('date', inplace=True)
-        print(f"Fetched {len(self.daily_data)} historical daily data points for {self.strategy_symbol}")
-        
+        try:
+            contract = Stock(self.symbol, 'SMART', 'USD')
+            self.ib.reqMarketDataType(4)
+            bars = self.ib.reqHistoricalData(
+                contract,
+                endDateTime='',
+                durationStr='10 Y',
+                barSizeSetting='1 day',
+                whatToShow='MIDPOINT',
+                useRTH=True,
+                formatDate=1
+            )
+            self.daily_data = util.df(bars)
+            self.daily_data['date'] = pd.to_datetime(self.daily_data['date'])
+            self.daily_data.set_index('date', inplace=True)
+            print(f"Fetched {len(self.daily_data)} historical daily data points for {self.strategy_symbol}")
+        except Exception as e:
+            print(f"Error fetching historical data for {self.strategy_symbol}: {e}")
+            print("Trying to fetch historical data with yfinance")
+            self.daily_data = yf.download(self.yfinance_symbol, period="max", interval="1d")
+            self.daily_data.rename(columns={'Close':'close'}, inplace=True)
+
     def calculate_moving_averages(self):
         """Calculate the Exponential Moving Average (EMA) on monthly data"""
+        print(f"Calculating {self.ma_window}-month EMA for {self.strategy_symbol}")
         if not isinstance(self.daily_data.index, pd.DatetimeIndex):
             print("Converting index to DatetimeIndex")
             self.daily_data.index = pd.to_datetime(self.daily_data.index)
-        
+
         # Ensure the index is sorted
         self.daily_data = self.daily_data.sort_index()
         
         # Resample to month end
-        self.monthly_data = self.daily_data.resample('ME').last()
+        try:
+            self.monthly_data = self.daily_data.resample('ME').last()
+        except Exception as e:
+            self.monthly_data = self.daily_data.resample('M').last()
         
         # Calculate EMA
         self.monthly_data['EMA'] = self.monthly_data['close'].ewm(span=self.ma_window, adjust=False).mean()
-        print(f"Calculated {self.ma_window}-month EMA for {self.strategy_symbol}")
         
     def generate_signals(self):
         """Generate buy/sell signals based on EMA crossover in monthly data"""
@@ -148,12 +163,12 @@ class Strategy:
         """Update the investment status of the strategy"""
         self.positions_df = self.strategy_manager.portfolio_manager.match_ib_positions_with_arcticdb()
         self.positions_df = self.positions_df[self.positions_df['symbol'] == self.strategy_symbol]
-        # if self.positions_df.empty:
-        #     print("Positions DataFrame is empty")
-        #     self.current_position = 0
-        self.current_position = self.positions_df['position'].iloc[-1] if not self.positions_df.empty else 0
+
+        self.current_position = int(self.positions_df['position'].iloc[-1]) if not self.positions_df.empty else 0
         print(f"Current position for {self.strategy_symbol}: {self.current_position}")
-        print(self.positions_df)
+        if self.current_position:   
+            self.invested_value = self.positions_df['marketValue_base'].iloc[-1]
+            self.current_weight = self.positions_df['% of nav'].iloc[-1]
 
     def on_fill(self, trade, fill):
         """Handle fill event"""
@@ -163,7 +178,6 @@ class Strategy:
             'trade': trade,
             'fill': fill
         })
-        add_log(f"Trade filled for {self.strategy_symbol}: {fill}")
         
     def on_status_change(self, trade):
         """Handle status change event"""
@@ -174,77 +188,102 @@ class Strategy:
             'status': trade.orderStatus.status,
             'info': f'Status Change message sent from {self.strategy_symbol}'
         })
-        add_log(f"Trade status changed for {self.strategy_symbol}: {trade.orderStatus.status}")
         
-    def run(self):
+    async def run(self):
         """Main loop to execute trading strategy"""
         # Subscribe to real-time market data
-        self.contract = Stock(self.symbol, 'SMART', 'USD')
+        self.contract = Stock(self.symbol, self.symbol_exchange, self.symbol_currency)
         self.ib.reqMktData(self.contract, '', False, False)
         
         # Check if the strategy is already invested
         self.update_investment_status()
+        orders = [o for o in self.strategy_manager.get_open_orders()]
         
         while True:
+            print(self.daily_data)
             latest_signal = self.daily_data['Signal'].iloc[-1]
             
             if not self.current_position and latest_signal == 1:
-                print(f"Current position: {self.current_position}")
-                # quantity = int(self.calculate_position_size())
-                # print(quantity)
-                # Buy Signal
-                trade = self.trade_manager.trade(self.contract,quantity=10,
-                                         order_type='MKT',
-                                         urgency='Patient', 
-                                         useRth=True)
-                
-                add_log(f"Buy order placed for {self.strategy_symbol}")
+                if not self.strategy_symbol in [o.orderRef for o in orders]:
+                    print(f"Opening position for {self.strategy_symbol}")
+
+                    trade = self.place_order(self.contract,qty=self.calculate_position_size(),
+                                             ordertype='MKT', urgency='Patient',
+                                             orderRef= self.strategy_symbol)
+                else:
+                     print(f"Order already exists for {self.strategy_symbol}")
+
             elif self.is_invested() and latest_signal == 0:
+                print(f"Closing position for {self.strategy_symbol}")
+
                 # Sell Signal
-                self.execute_trade('SELL', self.current_position)
-                add_log(f"Sell order placed for {self.strategy_symbol}")
+                trade = self.place_order(self.contract, qty=self.current_position*-1,
+                                         ordertype='MKT', urgency='Patient',
+                                         orderRef= self.strategy_symbol)
+
             elif self.is_invested() and self.check_rebalance_needed():
                 # Rebalance if needed
-                self.rebalance_position()
-                add_log(f"Rebalanced position for {self.strategy_symbol}")
+                trade = self.rebalance_position()
+                add_log(f"Rebalancing position for {self.strategy_symbol}")
             
-            # Assign callbacks for order updates
-            trade.fillEvent += self.on_fill
-            trade.statusEvent += self.on_status_change
-
             # Sleep until the next day
             print(f"Sleeping until one day")
-            self.ib.sleep(86400)  # Sleep for one day
-            
-    def calculate_position_size(self):
-        """Calculate the position size based on the strategy's target weight"""
-        self.total_equity =  sum(float(entry.value) for entry in self.ib.accountSummary() if entry.tag == "EquityWithLoanValue")
-        target_value = self.total_equity * self.target_weight
+            await asyncio.sleep(86400)  # Sleep for one day
 
-        
-        current_price = self.ib.reqMktData(self.contract, '', False, False).marketPrice()
-        quantity = target_value / current_price
-        print(quantity)
-        return quantity
+    def start(self):
+        """Start the strategy"""
+        asyncio.ensure_future(self.run())
     
-    def execute_trade(self, action, quantity):
-        """Execute a trade based on the action"""
-        order_type = 'MKT'  # Market Order
-        contract = Stock(self.symbol, 'SMART', 'USD')
-        trade = self.trade_manager.trade(
-            contract=contract,
-            quantity=quantity if action == 'BUY' else -quantity,
-            order_type=order_type,
-            orderRef=self.strategy_symbol,
-            urgency='Urgent',
-            useRth=True
-        )
-        
+    def place_order(self, con, qty, ordertype, algo = True, urgency='Patient', orderRef = "", limit = None, useRth=True):
+        trade = self.trade_manager.trade(con,quantity=qty,order_type=ordertype,urgency=urgency,orderRef=orderRef,useRth=useRth)
         # Assign callbacks for order updates
         trade.fillEvent += self.on_fill
         trade.statusEvent += self.on_status_change
+        return trade
+
+    def check_rebalance_needed(self):
+        """Check if a rebalance is needed based on the strategy's target weight"""
+        return True if self.current_weight > self.max_weight or self.current_weight < self.min_weight else False
+
+    def calculate_position_size(self):
+        """Calculate the position size based on the strategy's target weight"""
+        self.total_equity =  sum(float(entry.value) for entry in self.ib.accountSummary() if entry.tag == "EquityWithLoanValue")
+        target_value = self.total_equity * float(self.target_weight)
+
         
+        current_price = self.ib.reqMktData(self.contract, '', False, False).marketPrice()
+        
+        if math.isnan(current_price):
+            current_price = self.daily_data['close'].iloc[-1]
+        print("Current Price", current_price)
+
+        quantity = math.floor(target_value / current_price)
+        print(f"Calculated quantity: {quantity}")
+        return quantity
+
+    def rebalance_position(self):
+        """Rebalance the position based on the strategy's target weight"""
+        target_quantity = self.calculate_position_size()
+        if target_quantity > self.current_position:
+            # Buy       
+            trade = self.trade_manager.trade(self.contract,
+                                            quantity=target_quantity-self.current_position,
+                                            order_type='MKT',
+                                            urgency='Patient',
+                                            orderRef= self.strategy_symbol,
+                                            useRth=True)
+        elif target_quantity < self.current_position:
+            # Sell
+            trade = self.trade_manager.trade(self.contract,
+                                            quantity=target_quantity-self.current_position,
+                                            order_type='MKT',
+                                            urgency='Patient',
+                                            orderRef= self.strategy_symbol,
+                                            useRth=True)
+        trade.fillEvent += self.on_fill
+        trade.statusEvent += self.on_status_change
+        return trade
+
     def disconnect(self):
         """Disconnect logic for the IB client"""
         disconnect_from_IB(ib=self.ib, symbol=self.strategy_symbol)
-        add_log(f"Disconnected from IB for {self.strategy_symbol}")
