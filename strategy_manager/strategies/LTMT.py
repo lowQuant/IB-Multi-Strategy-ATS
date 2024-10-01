@@ -70,8 +70,7 @@ class Strategy:
         self.trade_manager = TradeManager(self.ib, self.strategy_manager)
         
         # Initialize strategy parameters
-        self.target_weight, self.min_weight, self.max_weight = get_strategy_allocation_bounds(self.strategy_symbol)
-        self.initialize_strategy()
+
         
     def initialize_strategy(self):
         """Initialize moving averages and signals"""
@@ -99,7 +98,7 @@ class Strategy:
         """Fetch historical daily price data for the strategy symbol"""
         # Fetch historical daily data using IB API
         try:
-            contract = Stock(self.symbol, 'SMART', 'USD')
+            contract = Stock(self.symbol, self.symbol_exchange, self.symbol_currency)
             self.ib.reqMarketDataType(4)
             bars = self.ib.reqHistoricalData(
                 contract,
@@ -192,6 +191,9 @@ class Strategy:
     async def run(self):
         """Main loop to execute trading strategy"""
         # Subscribe to real-time market data
+        self.target_weight, self.min_weight, self.max_weight = get_strategy_allocation_bounds(self.strategy_symbol)
+        self.initialize_strategy()
+
         self.contract = Stock(self.symbol, self.symbol_exchange, self.symbol_currency)
         self.ib.reqMktData(self.contract, '', False, False)
         
