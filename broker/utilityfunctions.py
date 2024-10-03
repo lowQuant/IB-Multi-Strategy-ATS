@@ -13,52 +13,55 @@ def get_last_full_trading_day(current_datetime=None):
     nyse = mcal.get_calendar('NYSE')
     
     # Get NYSE timezone
-    nyse_tz = ZoneInfo('America/New_York')
+    nyse_tz = pytz.timezone('America/New_York')
     
     # Use provided datetime or current time if none provided
     if current_datetime is None:
-        current_datetime = datetime.now()
-    
-    # Ensure current_datetime is timezone-aware
-    if current_datetime.tzinfo is None:
-        current_datetime = current_datetime.replace(tzinfo=ZoneInfo('UTC'))
+        current_datetime = datetime.now(pytz.timezone('Europe/Berlin'))
+    elif current_datetime.tzinfo is None:
+        current_datetime = pytz.timezone('Europe/Berlin').localize(current_datetime)
     
     # Convert to NYSE time
     nyse_time = current_datetime.astimezone(nyse_tz)
     
-    # Get market schedule for the current day and the previous day
-    schedule = nyse.schedule(start_date=nyse_time.date() - timedelta(days=1), end_date=nyse_time.date())
+    # Get market schedule for the current day and the previous few days
+    schedule = nyse.schedule(start_date=nyse_time.date() - timedelta(days=5), end_date=nyse_time.date())
     
     if not schedule.empty:
-        last_close = schedule.iloc[-1]['market_close'].astimezone(nyse_tz)
+        # Get the last row of the schedule (should be today or the most recent trading day)
+        last_day = schedule.iloc[-1]
+        market_close = last_day['market_close'].tz_convert(nyse_tz)
         
-        # If current time is after the last close, that day is the last full trading day
-        if nyse_time >= last_close:
-            return last_close.date()
+        # If current time is before the market close of the last day in the schedule,
+        # we need to look at the previous trading day
+        if nyse_time < market_close:
+            if len(schedule) > 1:
+                return schedule.index[-2].date()
+            else:
+                # If there's only one day in the schedule, find the previous trading day
+                previous_trading_days = nyse.valid_days(end_date=nyse_time.date() - timedelta(days=1), start_date=nyse_time.date() - timedelta(days=5))
+                return previous_trading_days[-1].date()
         else:
-            # Otherwise, we need to find the previous trading day
-            previous_trading_days = nyse.valid_days(end_date=nyse_time.date() - timedelta(days=1), start_date=nyse_time.date() - timedelta(days=5))
-            return previous_trading_days[-1].date()
+            # If current time is after market close, the last day in the schedule is the last full trading day
+            return last_day.name.date()
     else:
-        # If there's no schedule for today and yesterday (weekend or holiday), 
+        # If there's no schedule for the recent days (e.g., long weekend), 
         # find the last trading day
         previous_trading_days = nyse.valid_days(end_date=nyse_time.date() - timedelta(days=1), start_date=nyse_time.date() - timedelta(days=5))
         return previous_trading_days[-1].date()
-    
+
 def get_current_or_next_trading_day(current_datetime=None):
     # Create NYSE calendar
     nyse = mcal.get_calendar('NYSE')
     
     # Get NYSE timezone
-    nyse_tz = ZoneInfo('America/New_York')
+    nyse_tz = pytz.timezone('America/New_York')
     
     # Use provided datetime or current time if none provided
     if current_datetime is None:
-        current_datetime = datetime.now()
-    
-    # Ensure current_datetime is timezone-aware
-    if current_datetime.tzinfo is None:
-        current_datetime = current_datetime.replace(tzinfo=ZoneInfo('UTC'))
+        current_datetime = datetime.now(pytz.timezone('Europe/Berlin'))
+    elif current_datetime.tzinfo is None:
+        current_datetime = pytz.timezone('Europe/Berlin').localize(current_datetime)
     
     # Convert to NYSE time
     nyse_time = current_datetime.astimezone(nyse_tz)
@@ -67,21 +70,20 @@ def get_current_or_next_trading_day(current_datetime=None):
     schedule = nyse.schedule(start_date=nyse_time.date(), end_date=nyse_time.date() + timedelta(days=10))
     
     if not schedule.empty:
-        market_open = schedule.iloc[0]['market_open'].astimezone(nyse_tz)
-        market_close = schedule.iloc[0]['market_close'].astimezone(nyse_tz)
-        
-        # If the market is currently open, return today as the current trading day
-        if market_open <= nyse_time <= market_close:
-            return nyse_time.date()
-        else:
-            # Otherwise, find the next trading day
-            next_trading_days = nyse.valid_days(start_date=nyse_time.date() + timedelta(days=1), end_date=nyse_time.date() + timedelta(days=10))
-            return next_trading_days[0].date()
-    else:
-        # If no schedule for today (market holiday), find the next trading day
-        next_trading_days = nyse.valid_days(start_date=nyse_time.date(), end_date=nyse_time.date() + timedelta(days=10))
-        return next_trading_days[0].date()
+        today_schedule = schedule.loc[schedule.index.date == nyse_time.date()]
+        if not today_schedule.empty:
+            market_open = today_schedule.iloc[0]['market_open'].tz_convert(nyse_tz)
+            market_close = today_schedule.iloc[0]['market_close'].tz_convert(nyse_tz)
+            
+            # If the current time is before market close, return today
+            if nyse_time <= market_close:
+                return nyse_time.date()
     
+    # If we're here, it means today is not a trading day or the market has closed
+    # Find the next trading day
+    next_trading_days = nyse.valid_days(start_date=nyse_time.date() + timedelta(days=1), end_date=nyse_time.date() + timedelta(days=10))
+    return next_trading_days[0].date()
+
 def get_earnings():
     # Get the last full trading day and the current or next trading day
     last_trading_day = get_last_full_trading_day()
