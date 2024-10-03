@@ -198,22 +198,24 @@ def get_vol_data(symbols: list[str] = None, curated = True, include_yf = True):
         # Calculate daily returns
         daily_returns = yf_data['Close'].pct_change()
         
-        # Calculate 30-day rolling volatility
-        rolling_volatility = daily_returns.rolling(window=30).std() * np.sqrt(252)
+        # # Calculate 30-day rolling volatility
+        # rolling_volatility = daily_returns.rolling(window=30).std() * np.sqrt(252)
         
-        # Get the most recent volatility for each symbol
-        latest_volatility = rolling_volatility.iloc[-1]
+        # # Get the most recent volatility for each symbol
+        # latest_volatility = rolling_volatility.iloc[-1]
         
         # Merge the calculated volatility and close price with df_vol
         df_vol = df_vol.merge(
             pd.DataFrame({
-                'calculated_volatility': latest_volatility,
+                # 'calculated_volatility': latest_volatility,
                 'close': yf_data['Close'].iloc[-1]
             }),
             left_on='act_symbol',
             right_index=True
         )
         # Calculate vol_premium using the calculated volatility
-        df_vol['vol_premium'] = df_vol['iv_current'] / df_vol['calculated_volatility']
+        df_vol['vol_premium'] = df_vol['iv_current'] / df_vol['hv_current']
 
     return df_vol.sort_values(by='vol_premium', ascending=False)
+
+print(get_vol_data())
