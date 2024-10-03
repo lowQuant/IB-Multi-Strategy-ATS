@@ -217,3 +217,12 @@ def get_vol_data(symbols: list[str] = None, curated = True, include_yf = True):
         df_vol['vol_premium'] = df_vol['iv_current'] / df_vol['calculated_volatility']
 
     return df_vol.sort_values(by='vol_premium', ascending=False)
+
+print(get_current_or_next_trading_day())
+print(get_last_full_trading_day())
+
+print(get_earnings())
+
+print(get_vol_data())
+
+
