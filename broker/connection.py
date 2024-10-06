@@ -2,11 +2,12 @@
 from collections import deque
 from ib_async import *
 import threading, time
-from gui.log import add_log, start_event
+
 
 ib = None  # Global variable for the IB client
 
 def connect_to_IB(port=7497, clientid=0, symbol=None):
+    from gui.log import add_log, start_event
     global ib
     util.startLoop()  # Needed in script mode
     ib = IB()
@@ -23,6 +24,7 @@ def connect_to_IB(port=7497, clientid=0, symbol=None):
     return ib
 
 def disconnect_from_IB(ib, symbol=None):
+    from gui.log import add_log, start_event
     if ib and ib.isConnected():
         if ib.client.clientId == 0:
             add_log("Disconnected from IB [StrategyManager]")

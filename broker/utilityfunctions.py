@@ -7,7 +7,24 @@ from datetime import datetime, time, timedelta
 import pandas_market_calendars as mcal
 from zoneinfo import ZoneInfo
 import yfinance as yf
+import asyncio
+from ib_async import *
 
+def get_isin_from_contract(contract, ib=None):
+    import xml.etree.ElementTree as ET
+    if not ib:
+        ib = connect_to_IB(clientid=77)
+    fundamentals = ib.reqFundamentalData(contract, reportType='ReportSnapshot')
+    root = ET.fromstring(fundamentals)
+    for elem in root.iter():
+        prev_elem = None
+        for elem in root.iter():
+            if prev_elem is not None:
+                if prev_elem.text == contract.symbol:
+                    isin = elem.text
+                    return isin
+            prev_elem = elem
+    
 def get_last_full_trading_day(current_datetime=None):
     # Create NYSE calendar
     nyse = mcal.get_calendar('NYSE')
@@ -197,27 +214,123 @@ def get_vol_data(symbols: list[str] = None, curated = True, include_yf = True):
         start_date = end_date - timedelta(days=365*2)
         yf_data = yf.download(df_vol['act_symbol'].tolist(), start=start_date, end=end_date)
         
-        # Calculate daily returns
-        daily_returns = yf_data['Close'].pct_change()
+        # Extract the most recent close price for each symbol
+        close_prices = yf_data['Close'].iloc[-1]
         
-        # # Calculate 30-day rolling volatility
-        # rolling_volatility = daily_returns.rolling(window=30).std() * np.sqrt(252)
-        
-        # # Get the most recent volatility for each symbol
-        # latest_volatility = rolling_volatility.iloc[-1]
-        
-        # Merge the calculated volatility and close price with df_vol
-        df_vol = df_vol.merge(
-            pd.DataFrame({
-                # 'calculated_volatility': latest_volatility,
-                'close': yf_data['Close'].iloc[-1]
-            }),
-            left_on='act_symbol',
-            right_index=True
-        )
-        # Calculate vol_premium using the calculated volatility
-        df_vol['vol_premium'] = df_vol['iv_current'] / df_vol['hv_current']
+        # Merge the close price with df_vol
+        df_vol['close'] = close_prices
 
     return df_vol.sort_values(by='vol_premium', ascending=False)
 
-print(get_vol_data())
+async def process_get_filtered_put_options(ib, symbol, max_dte=60, unfiltered=False,min_safety_margin=0.05,max_safety_margin=0):
+    
+    # Get the stock contract
+    stock = Stock(symbol, 'SMART', 'USD')
+    await ib.qualifyContractsAsync(stock)
+    
+    # Get the stock price
+    [ticker] = await ib.reqTickersAsync(stock)
+    stock_price = ticker.marketPrice()
+    
+    if np.isnan(stock_price):
+        print(f"Unable to get market price for {symbol}")
+        return None, None
+    
+    # Calculate strike range
+    lower_strike = stock_price * (1-min_safety_margin)  
+    upper_strike = stock_price * (1+max_safety_margin) 
+    
+    # Get option chains
+    chains = await ib.reqSecDefOptParamsAsync(stock.symbol, '', stock.secType, stock.conId)
+    
+    # Get the chain with exchange 'SMART'
+    chain = next((c for c in chains if c.exchange == 'SMART'), None)
+    if not chain:
+        print(f"No SMART chain found for {symbol}")
+        return None, None
+    
+    # Get current date
+    today = datetime.now().date()
+    
+    # Filter expirations and strikes
+    valid_expirations = [exp for exp in chain.expirations 
+                         if (datetime.strptime(exp, '%Y%m%d').date() - today).days <= max_dte]
+    valid_strikes = [strike for strike in chain.strikes 
+                     if lower_strike <= strike <= upper_strike]
+    
+    # Create option contracts
+    contracts = [Option(symbol, exp, strike, 'P', 'SMART') 
+                 for exp in valid_expirations 
+                 for strike in valid_strikes]
+    
+    # Qualify the contracts
+    contracts = await ib.qualifyContractsAsync(*contracts)
+    
+    # Request market data
+    tickers = await ib.reqTickersAsync(*contracts)
+    
+    # Create DataFrame
+    data = []
+    for ticker in tickers:
+        contract = ticker.contract
+        expiration = datetime.strptime(contract.lastTradeDateOrContractMonth, '%Y%m%d').date()
+        dte = (expiration - today).days
+        data.append({
+            'Symbol': symbol,
+            'StockPrice': stock_price,
+            'Strike': contract.strike,
+            'Expiration': expiration,
+            'DTE': dte,
+            'Bid': ticker.bid,
+            'BidSize': ticker.bidSize,
+            'Ask': ticker.ask,
+            'AskSize': ticker.askSize,
+            'Contract': contract})
+    
+    df = pd.DataFrame(data)
+    df = df.sort_values(['Expiration', 'Strike'])
+    if unfiltered:
+        return df
+    options_df = df.copy()
+    options_df['option_premium'] = options_df['Bid'] / options_df['Strike']
+    options_df['annualized_premium'] = options_df['option_premium'] * (365 / options_df['DTE'])
+    options_df['safety_margin'] = stock_price - options_df['Strike']
+    options_df = options_df[(options_df['option_premium'] > 0.01) & (options_df['annualized_premium'] > 0.1)]
+    options_df['safety_margin%'] = options_df['safety_margin'] / options_df['StockPrice']
+    
+    # Sort the DataFrame after creating all columns
+    options_df = options_df.sort_values('safety_margin%', ascending=False)
+    
+    return options_df.head(10), stock_price
+
+async def get_filtered_put_options(ib, symbols,max_dte = 60, unfiltered=False,min_safety_margin=0.05,max_safety_margin=0):
+    tasks = [process_get_filtered_put_options(ib, symbol, max_dte, unfiltered,min_safety_margin) for symbol in symbols]
+    results = await asyncio.gather(*tasks)
+
+    all_options = []
+    for options_df, _ in results:
+        if options_df is not None and not options_df.empty:
+            all_options.append(options_df)
+    
+    if all_options:
+        return pd.concat(all_options, ignore_index=True)
+    else:
+        return pd.DataFrame()
+
+def connect_to_IB(port=7497, clientid=0, symbol=None):
+    util.startLoop()  # Needed in script mode
+    ib = IB()
+    try:
+        ib.connect('127.0.0.1', port, clientId=clientid)
+    except ConnectionError:
+        ib = None  # Reset ib on failure
+    return ib
+
+
+if __name__ == "__main__":
+    ib = connect_to_IB()
+    vol_df = get_vol_data(curated=False, include_yf=False)
+    symbols = vol_df['act_symbol'].tolist()
+    options_df = asyncio.run(get_filtered_put_options(ib, symbols, max_dte=25, unfiltered=True))
+    print(options_df)
+    ib.disconnect()

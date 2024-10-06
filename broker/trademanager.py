@@ -1,6 +1,5 @@
 # ATS/broker/trademanager.py
 from ib_async import *
-from gui.log import add_log
 import time
 
 class TradeManager:
