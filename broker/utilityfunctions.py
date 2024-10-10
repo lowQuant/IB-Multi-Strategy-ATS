@@ -12,7 +12,7 @@ def get_last_full_trading_day(current_datetime=None):
     # Create NYSE calendar
     nyse = mcal.get_calendar('NYSE')
     
-    # Get NYSE timezone
+    # Get NYSE timezoney
     nyse_tz = pytz.timezone('America/New_York')
     
     # Use provided datetime or current time if none provided
@@ -197,18 +197,26 @@ def get_vol_data(symbols: list[str] = None, curated = True, include_yf = True):
         start_date = end_date - timedelta(days=365*2)
         yf_data = yf.download(df_vol['act_symbol'].tolist(), start=start_date, end=end_date)
         
-        # Extract the most recent closing price for each symbol
-        latest_close = yf_data['Close'].iloc[-1]
+        # Calculate daily returns
+        daily_returns = yf_data['Close'].pct_change()
         
-        # Merge the closing price data with the volatility dataframe
-        df_vol = df_vol.merge(latest_close.rename('close_price'), left_on='act_symbol', right_index=True, how='left')
+        # Calculate 30-day rolling volatility
+        rolling_volatility = daily_returns.rolling(window=30).std() * np.sqrt(252)
         
-        # Convert close_price to float and handle any potential NaN values
-        df_vol['close_price'] = df_vol['close_price'].astype(float)
+        # Get the most recent volatility for each symbol
+        latest_volatility = rolling_volatility.iloc[-1]
         
-        # Optionally, you can fill NaN values with a placeholder or remove those rows
-        # df_vol['close_price'] = df_vol['close_price'].fillna(-1)  # Fill NaNs with -1
-        # df_vol = df_vol.dropna(subset=['close_price'])  # Or drop rows with NaN close prices
+        # Merge the calculated volatility and close price with df_vol
+        df_vol = df_vol.merge(
+            pd.DataFrame({
+                'calculated_volatility': latest_volatility,
+                'close': yf_data['Close'].iloc[-1]
+            }),
+            left_on='act_symbol',
+            right_index=True
+        )
+        # Calculate vol_premium using the calculated volatility
+        df_vol['vol_premium'] = df_vol['iv_current'] / df_vol['calculated_volatility']
 
     return df_vol.sort_values(by='vol_premium', ascending=False)
 
