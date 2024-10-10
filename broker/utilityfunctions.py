@@ -101,29 +101,45 @@ def get_current_or_next_trading_day(current_datetime=None):
     next_trading_days = nyse.valid_days(start_date=nyse_time.date() + timedelta(days=1), end_date=nyse_time.date() + timedelta(days=10))
     return next_trading_days[0].date()
 
-def get_earnings():
+def get_earnings(start_date=None, end_date=None):
     # Get the last full trading day and the current or next trading day
     last_trading_day = get_last_full_trading_day()
     next_trading_day = get_current_or_next_trading_day()
 
-    # Define the SQL query with the specific dates and conditions
-    query = f"""
-    WITH LatestEarnings AS (
-        SELECT *,
-            ROW_NUMBER() OVER (PARTITION BY act_symbol ORDER BY `date` DESC) AS rn
-        FROM `earnings_calendar`
-        WHERE `when` IS NOT NULL
-    )
-    SELECT *
-    FROM LatestEarnings
-    WHERE rn = 1
-    AND (
-        (`date` = '{last_trading_day}' AND `when` = 'After market close') OR
-        (`date` = '{next_trading_day}' AND `when` = 'Before market open')
-    )
-    ORDER BY `act_symbol` ASC;
-    """
-    
+    if not start_date and not end_date:
+        # Define the SQL query with the specific dates and conditions
+        query = f"""
+        WITH LatestEarnings AS (
+            SELECT *,
+                ROW_NUMBER() OVER (PARTITION BY act_symbol ORDER BY `date` DESC) AS rn
+            FROM `earnings_calendar`
+            WHERE `when` IS NOT NULL
+        )
+        SELECT *
+        FROM LatestEarnings
+        WHERE rn = 1
+        AND (
+            (`date` = '{last_trading_day}' AND `when` = 'After market close') OR
+            (`date` = '{next_trading_day}' AND `when` = 'Before market open')
+        )
+        ORDER BY `act_symbol` ASC;
+        """
+    else:
+        query = f"""
+        WITH LatestEarnings AS (
+            SELECT *,
+                ROW_NUMBER() OVER (PARTITION BY act_symbol ORDER BY `date` DESC) AS rn
+            FROM `earnings_calendar`
+            WHERE `when` IS NOT NULL
+        )
+        SELECT *
+        FROM LatestEarnings
+        WHERE rn = 1
+        AND (
+            (`date` >= '{start_date}' AND `date` <= '{end_date}')
+        )
+        ORDER BY `date` ASC, `act_symbol` ASC;
+        """
     # URL encode the query
     encoded_query = requests.utils.quote(query)
     
@@ -210,19 +226,23 @@ def get_vol_data(symbols: list[str] = None, curated = True, include_yf = True):
     df_vol['vol_premium'] = df_vol['iv_current']/df_vol['hv_current']
 
     if include_yf:
-        end_date = datetime.now().date()
-        start_date = end_date - timedelta(days=365*2)
-        yf_data = yf.download(df_vol['act_symbol'].tolist(), start=start_date, end=end_date)
-        
-        # Extract the most recent close price for each symbol
-        close_prices = yf_data['Close'].iloc[-1]
-        
-        # Merge the close price with df_vol
-        df_vol['close'] = close_prices
+        # Download last prices from Yahoo Finance and add to vol_df
+        last_prices = {}
+        for symbol in df_vol['act_symbol']:
+            try:
+                ticker = yf.Ticker(symbol)
+                last_price = ticker.history(period="1d")['Close'].iloc[-1]
+                last_prices[symbol] = last_price
+            except Exception as e:
+                print(f"Error fetching data for {symbol}: {e}")
+                last_prices[symbol] = np.nan
+
+    # Add the last prices to vol_df
+    df_vol['close'] = df_vol['act_symbol'].map(last_prices)
 
     return df_vol.sort_values(by='vol_premium', ascending=False)
 
-async def process_get_filtered_put_options(ib, symbol, max_dte=60, unfiltered=False,min_safety_margin=0.05,max_safety_margin=0):
+async def process_get_filtered_put_options(ib, symbol, max_dte=60, unfiltered=False, strike_range_percent=0.05):
     
     # Get the stock contract
     stock = Stock(symbol, 'SMART', 'USD')
@@ -233,12 +253,12 @@ async def process_get_filtered_put_options(ib, symbol, max_dte=60, unfiltered=Fa
     stock_price = ticker.marketPrice()
     
     if np.isnan(stock_price):
-        print(f"Unable to get market price for {symbol}")
-        return None, None
+        print(f"Unable to get market price for {symbol}." )
+        stock_price = ticker.close
     
     # Calculate strike range
-    lower_strike = stock_price * (1-min_safety_margin)  
-    upper_strike = stock_price * (1+max_safety_margin) 
+    lower_strike = stock_price * (1-strike_range_percent)  
+    upper_strike = stock_price * (1+strike_range_percent) 
     
     # Get option chains
     chains = await ib.reqSecDefOptParamsAsync(stock.symbol, '', stock.secType, stock.conId)
@@ -288,7 +308,7 @@ async def process_get_filtered_put_options(ib, symbol, max_dte=60, unfiltered=Fa
             'Contract': contract})
     
     df = pd.DataFrame(data)
-    df = df.sort_values(['Expiration', 'Strike'])
+    
     if unfiltered:
         return df
     options_df = df.copy()
@@ -303,8 +323,8 @@ async def process_get_filtered_put_options(ib, symbol, max_dte=60, unfiltered=Fa
     
     return options_df.head(10), stock_price
 
-async def get_filtered_put_options(ib, symbols,max_dte = 60, unfiltered=False,min_safety_margin=0.05,max_safety_margin=0):
-    tasks = [process_get_filtered_put_options(ib, symbol, max_dte, unfiltered,min_safety_margin) for symbol in symbols]
+async def get_filtered_put_options(ib, symbols,max_dte = 60, unfiltered=False,strike_range_percent=0.05):
+    tasks = [process_get_filtered_put_options(ib, symbol, max_dte, unfiltered,strike_range_percent) for symbol in symbols]
     results = await asyncio.gather(*tasks)
 
     all_options = []
@@ -317,7 +337,7 @@ async def get_filtered_put_options(ib, symbols,max_dte = 60, unfiltered=False,mi
     else:
         return pd.DataFrame()
 
-def connect_to_IB(port=7497, clientid=0, symbol=None):
+def connect_to_IB(port=7497, clientid=2, symbol=None):
     util.startLoop()  # Needed in script mode
     ib = IB()
     try:
@@ -326,11 +346,22 @@ def connect_to_IB(port=7497, clientid=0, symbol=None):
         ib = None  # Reset ib on failure
     return ib
 
+def pea_oss(ib,symbols,max_dte=25,unfiltered=False,strike_range_percent=0.05,):
+    options_df = asyncio.run(get_filtered_put_options(ib, symbols, max_dte, unfiltered,strike_range_percent))
+    return options_df
 
 if __name__ == "__main__":
     ib = connect_to_IB()
-    vol_df = get_vol_data(curated=False, include_yf=False)
+
+    start_date = get_last_full_trading_day()
+    end_date = get_current_or_next_trading_day() + timedelta(days=4)
+
+    earnings = get_earnings(start_date=start_date, end_date=end_date)
+    symbols = earnings['symbol'].tolist()
+
+    vol_df = get_vol_data(symbols,curated=False, include_yf=False)
     symbols = vol_df['act_symbol'].tolist()
-    options_df = asyncio.run(get_filtered_put_options(ib, symbols, max_dte=25, unfiltered=True))
+    print(symbols)
+    options_df = asyncio.run(get_filtered_put_options(ib, symbols, max_dte=25, unfiltered=False))
     print(options_df)
     ib.disconnect()
