@@ -1,14 +1,17 @@
 # IB_Multi_Strategy_ATS/broker/utilityfunctions.py
 
-import requests, pytz
+import requests, pytz, math
 import pandas as pd
 import numpy as np
-from datetime import datetime, time, timedelta
+from datetime import datetime, timedelta
 import pandas_market_calendars as mcal
 from zoneinfo import ZoneInfo
 import yfinance as yf
 import asyncio
 from ib_async import *
+from data_and_research import ac
+from collections import defaultdict
+import matplotlib.pyplot as plt
 
 def get_isin_from_contract(contract, ib=None):
     import xml.etree.ElementTree as ET
@@ -242,101 +245,115 @@ def get_vol_data(symbols: list[str] = None, curated = True, include_yf = True):
 
     return df_vol.sort_values(by='vol_premium', ascending=False)
 
-async def process_get_filtered_put_options(ib, symbol, max_dte=60, unfiltered=False, strike_range_percent=0.05):
-    
-    # Get the stock contract
-    stock = Stock(symbol, 'SMART', 'USD')
-    await ib.qualifyContractsAsync(stock)
-    
-    # Get the stock price
-    [ticker] = await ib.reqTickersAsync(stock)
-    stock_price = ticker.marketPrice()
-    
-    if np.isnan(stock_price):
-        print(f"Unable to get market price for {symbol}." )
-        stock_price = ticker.close
-    
-    # Calculate strike range
-    lower_strike = stock_price * (1-strike_range_percent)  
-    upper_strike = stock_price * (1+strike_range_percent) 
-    
-    # Get option chains
-    chains = await ib.reqSecDefOptParamsAsync(stock.symbol, '', stock.secType, stock.conId)
-    
-    # Get the chain with exchange 'SMART'
-    chain = next((c for c in chains if c.exchange == 'SMART'), None)
-    if not chain:
-        print(f"No SMART chain found for {symbol}")
-        return None, None
-    
-    # Get current date
-    today = datetime.now().date()
-    
-    # Filter expirations and strikes
-    valid_expirations = [exp for exp in chain.expirations 
-                         if (datetime.strptime(exp, '%Y%m%d').date() - today).days <= max_dte]
-    valid_strikes = [strike for strike in chain.strikes 
-                     if lower_strike <= strike <= upper_strike]
-    
-    # Create option contracts
-    contracts = [Option(symbol, exp, strike, 'P', 'SMART') 
-                 for exp in valid_expirations 
-                 for strike in valid_strikes]
-    
-    # Qualify the contracts
-    contracts = await ib.qualifyContractsAsync(*contracts)
-    
-    # Request market data
-    tickers = await ib.reqTickersAsync(*contracts)
-    
-    # Create DataFrame
-    data = []
-    for ticker in tickers:
-        contract = ticker.contract
-        expiration = datetime.strptime(contract.lastTradeDateOrContractMonth, '%Y%m%d').date()
-        dte = (expiration - today).days
-        data.append({
-            'Symbol': symbol,
-            'StockPrice': stock_price,
-            'Strike': contract.strike,
-            'Expiration': expiration,
-            'DTE': dte,
-            'Bid': ticker.bid,
-            'BidSize': ticker.bidSize,
-            'Ask': ticker.ask,
-            'AskSize': ticker.askSize,
-            'Contract': contract})
-    
-    df = pd.DataFrame(data)
-    
-    if unfiltered:
-        return df
-    options_df = df.copy()
-    options_df['option_premium'] = options_df['Bid'] / options_df['Strike']
-    options_df['annualized_premium'] = options_df['option_premium'] * (365 / options_df['DTE'])
-    options_df['safety_margin'] = stock_price - options_df['Strike']
-    options_df = options_df[(options_df['option_premium'] > 0.01) & (options_df['annualized_premium'] > 0.1)]
-    options_df['safety_margin%'] = options_df['safety_margin'] / options_df['StockPrice']
-    
-    # Sort the DataFrame after creating all columns
-    options_df = options_df.sort_values('safety_margin%', ascending=False)
-    
-    return options_df.head(10), stock_price
+async def process_get_filtered_put_options(ib, symbol, min_dte=0, max_dte=60, filtered=False, strike_range_percent=0.25):
+    try:
+        # Get the stock contract
+        stock = Stock(symbol, 'SMART', 'USD')
+        await ib.qualifyContractsAsync(stock)
+        
+        # Get the stock price
+        [ticker] = await ib.reqTickersAsync(stock)
+        stock_price = ticker.marketPrice() if ticker.marketPrice() is not None else ticker.close
+        
+        if math.isnan(stock_price) or stock_price is None:
+            print(f"Unable to get valid stock price for {symbol}")
+            return None
 
-async def get_filtered_put_options(ib, symbols,max_dte = 60, unfiltered=False,strike_range_percent=0.05):
-    tasks = [process_get_filtered_put_options(ib, symbol, max_dte, unfiltered,strike_range_percent) for symbol in symbols]
+        # Calculate strike range
+        lower_strike = stock_price * (1 - strike_range_percent)  
+        upper_strike = stock_price * (1 + strike_range_percent) 
+        
+        # Get option chains
+        chains = await ib.reqSecDefOptParamsAsync(stock.symbol, '', stock.secType, stock.conId)
+        
+        # Get the chain with exchange 'SMART'
+        chain = next((c for c in chains if c.exchange == 'SMART'), None)
+        if not chain:
+            print(f"No SMART chain found for {symbol}")
+            return None
+        
+        # Get current date
+        today = datetime.now().date()
+        
+        # Filter expirations and strikes
+        valid_expirations = [exp for exp in chain.expirations 
+                             if min_dte <= (datetime.strptime(exp, '%Y%m%d').date() - today).days <= max_dte]
+        valid_strikes = [strike for strike in chain.strikes 
+                         if lower_strike <= strike <= upper_strike]
+        
+        if not valid_expirations or not valid_strikes:
+            print(f"No valid expirations or strikes found for {symbol}")
+            return None
+
+        # Create option contracts
+        contracts = [Option(symbol, exp, strike, 'P', 'SMART') 
+                     for exp in valid_expirations 
+                     for strike in valid_strikes]
+        
+        # Qualify the contracts
+        contracts = await ib.qualifyContractsAsync(*contracts)
+        
+        # Request market data
+        tickers = await ib.reqTickersAsync(*contracts)
+        
+        # Create DataFrame
+        data = []
+        for ticker in tickers:
+            contract = ticker.contract
+            expiration = datetime.strptime(contract.lastTradeDateOrContractMonth, '%Y%m%d').date()
+            dte = (expiration - today).days
+            data.append({
+                'Symbol': symbol,
+                'StockPrice': stock_price,
+                'Strike': contract.strike,
+                'Expiration': expiration,
+                'DTE': dte,
+                'Bid': ticker.bid,
+                'BidSize': ticker.bidSize,
+                'Ask': ticker.ask,
+                'AskSize': ticker.askSize,
+                'Last': ticker.last,
+                'Contract': contract})
+        
+        df = pd.DataFrame(data)
+        if df.empty:
+            print(f"No option data available for {symbol}")
+            return None
+
+        df = df.sort_values(['Expiration', 'Strike'])
+
+        if filtered:     
+            options_df = df.copy()
+            options_df['option_premium'] = options_df['Bid'] / options_df['Strike']
+            options_df['annualized_premium'] = options_df['option_premium'] * (365 / options_df['DTE'])
+            options_df['safety_margin'] = stock_price - options_df['Strike']
+            options_df = options_df[(options_df['option_premium'] > 0.01) & (options_df['annualized_premium'] > 0.1)]
+            options_df['safety_margin%'] = options_df['safety_margin'] / options_df['StockPrice']
+            
+            # Sort the DataFrame after creating all columns
+            options_df = options_df.sort_values('safety_margin%', ascending=False)
+            return options_df.head(10)
+        else:
+            return df
+    except Exception as e:
+        print(f"Error processing {symbol}: {str(e)}")
+        return None
+
+async def get_filtered_put_options(ib, symbols, min_dte=0, max_dte=60, filtered=False, strike_range_percent=0.25):
+    if not isinstance(symbols, list):
+        symbols = [symbols]
+        
+    tasks = [process_get_filtered_put_options(ib, symbol, min_dte, max_dte, filtered, strike_range_percent) for symbol in symbols]
     results = await asyncio.gather(*tasks)
 
-    all_options = []
-    for options_df, _ in results:
-        if options_df is not None and not options_df.empty:
-            all_options.append(options_df)
+    all_options = [df for df in results if df is not None and not df.empty]
     
     if all_options:
         return pd.concat(all_options, ignore_index=True)
     else:
+        print("No valid data for any symbols")
         return pd.DataFrame()
-
+    
 def connect_to_IB(port=7497, clientid=2, symbol=None):
     util.startLoop()  # Needed in script mode
     ib = IB()
@@ -346,22 +363,90 @@ def connect_to_IB(port=7497, clientid=2, symbol=None):
         ib = None  # Reset ib on failure
     return ib
 
-def pea_oss(ib,symbols,max_dte=25,unfiltered=False,strike_range_percent=0.05,):
-    options_df = asyncio.run(get_filtered_put_options(ib, symbols, max_dte, unfiltered,strike_range_percent))
-    return options_df
+def pea_oss(ib,symbols,max_dte=50):
+    options_df = asyncio.run(get_filtered_put_options(ib, symbols, max_dte))
+    options_df['Premium'] = np.where(options_df['Bid'] == -1.0,
+                                     options_df['Last'] / options_df['Strike'],
+                                     options_df['Bid'] / options_df['Strike'])
+    options_df['Annualized Premium'] = options_df['Premium'] * (365 / options_df['DTE'])
+    options_df['Safety Margin in %'] = (options_df['StockPrice'] - options_df['Strike']) / options_df['StockPrice']
+    options_df = options_df[(options_df['Premium'] > 0.01) & (options_df['Annualized Premium'] > 0.1) & (options_df['Safety Margin in %'] > 0.05)]
+    
+    return options_df.sort_values('Annualized Premium', ascending=False)
+
+def get_index_sector_composition(source='yf' or 'universe',symbols=None,index='spy' or 'qqq'):
+    if index == 'spy':
+        spx = pd.read_html('https://en.wikipedia.org/wiki/List_of_S%26P_500_companies')[0]
+        symbols = spx['Symbol'].tolist()
+    else:
+        qqq = pd.read_html('https://en.wikipedia.org/wiki/Nasdaq-100')[4]
+        symbols = qqq['Ticker'].tolist()
+        
+    sectors = np.array([])  
+    market_caps = np.array([])
+
+    if source == 'yf':
+        for sym in symbols:
+            info = yf.Ticker(sym).info
+            try:
+                sector = info['sector']
+                sectors = np.append(sectors, sector)
+                market_cap = info['marketCap']
+                market_caps = np.append(market_caps, market_cap)
+            except:
+                next
+    elif source == 'universe':
+        lib = ac.get_library('univ')
+        univ = lib.read('us_equities').data
+
+        for sym in symbols:
+            try:
+                sector = univ.loc[univ['Symbol'] == sym, 'Sector'].values[0]
+                market_cap = univ.loc[univ['Symbol'] == sym, 'Market Cap'].values[0]
+                if math.isnan(market_cap):
+                    next 
+                else:
+                    market_caps = np.append(market_caps, market_cap)
+                sectors = np.append(sectors, sector)
+            except:
+                next
+
+    # Dictionary to hold capital at risk by sector
+    mktcap_by_sector = defaultdict(float)
+
+    # Aggregate capital at risk by sector
+    for cap, sector in zip(market_caps, sectors):
+        mktcap_by_sector[sector] += cap
+
+    # Prepare data for the pie chart
+    labels = list(mktcap_by_sector.keys())
+    sizes = list(mktcap_by_sector.values())
+
+    # Plotting the pie chart
+    plt.figure(figsize=(8, 8))
+    plt.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=140)
+    plt.title('S&P 500 Sector Composition')
+    plt.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle.
+    plt.show()
+
+    return mktcap_by_sector
 
 if __name__ == "__main__":
     ib = connect_to_IB()
 
-    start_date = get_last_full_trading_day()
-    end_date = get_current_or_next_trading_day() + timedelta(days=4)
+    # start_date = get_last_full_trading_day()
+    # end_date = get_current_or_next_trading_day() + timedelta(days=4)
 
-    earnings = get_earnings(start_date=start_date, end_date=end_date)
+    # earnings = get_earnings(start_date=start_date, end_date=end_date)
+    earnings = get_earnings()
     symbols = earnings['symbol'].tolist()
+
+    print(earnings)
 
     vol_df = get_vol_data(symbols,curated=False, include_yf=False)
     symbols = vol_df['act_symbol'].tolist()
     print(symbols)
-    options_df = asyncio.run(get_filtered_put_options(ib, symbols, max_dte=25, unfiltered=False))
+    # options_df = asyncio.run(get_filtered_put_options(ib, symbols, max_dte=25))
+    options_df = pea_oss(ib,symbols,max_dte=25)
     print(options_df)
     ib.disconnect()
