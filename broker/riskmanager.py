@@ -28,6 +28,60 @@ class RiskManager:
         portfolio['asset_class'] = portfolio['contract'].apply(lambda x: type(x))
         return portfolio
 
+    def get_short_put_exposure(self,exclude_ETFs=True):
+        ''' Function that retrieves short put exposure data.
+        Param: exclude_ETFs: If True, ETFs are excluded from the analysis.
+        
+        Output: DataFrame with short put exposure data and a dictionary with total exposure, exposure at risk and expected dollar return.'''
+
+        self.portfolio = self.get_portfolio_data()
+
+        put_option_rows = [row for _,row in self.portfolio.iterrows() if row['contract'].right == 'P' and np.sign(row['position']) == -1]
+        short_put_df = pd.DataFrame(put_option_rows)
+
+        def get_sector(symbol, source='yf' or 'universe'):
+            if source == 'yf':
+                info = yf.Ticker(symbol).info
+                try:
+                    sector = info['sector']
+                    return sector
+                except KeyError:
+                    return None
+            elif source == 'universe':
+                # Check if the symbol exists in the DataFrame
+                if symbol in univ['Symbol'].values:
+                    sector = univ.loc[univ['Symbol'] == symbol, 'Sector'].values[0]
+                    return sector
+                else:
+                    return None
+        
+        short_put_df['sector'] = short_put_df['symbol'].apply(lambda x: get_sector(x,source='universe'))
+        
+        if exclude_ETFs:
+            short_put_df = short_put_df[short_put_df['sector'].notna()].reset_index(drop=True)
+        
+        prices = {}
+        for symbol in short_put_df['symbol'].unique():
+            # Create Stock contract
+            contract = Stock(symbol, 'SMART', 'USD')
+            self.ib.qualifyContracts(contract)
+            [ticker] = self.ib.reqTickers(contract)
+
+            price = ticker.marketPrice() if ticker.marketPrice() is not None else ticker.close
+            prices[symbol] = price
+            
+            self.ib.sleep(0.1)
+
+        # Map prices to the stocks_only dataframe
+        short_put_df['stockprice'] = short_put_df['symbol'].map(prices)
+        short_put_df['strike'] = short_put_df['contract'].apply(lambda x: x.strike)
+        short_put_df['exposure_level1'] = abs(short_put_df['position']) * short_put_df['strike'] * 100
+        short_put_df['exposure_level2'] = np.where(short_put_df['strike'] >= short_put_df['stockprice']*0.95, short_put_df['exposure_level1'], 0)
+        short_put_df['expected_dollar_return'] = np.where(short_put_df['strike'] <= short_put_df['stockprice'], abs(short_put_df['marketValue']), short_put_df['marketValue'] + (short_put_df['averageCost']))
+
+        self.short_put_df =short_put_df[['contract','symbol','sector','strike','stockprice','position','marketValue','averageCost','exposure_level1','exposure_level2','expected_dollar_return']]
+        return self.short_put_df, {'Total Exposure': self.short_put_df.exposure_level1.sum(), 'Total Exposure at Risk': self.short_put_df.exposure_level2.sum(), 'Total Expected Dollar Return': self.short_put_df.expected_dollar_return.sum()}
+
     def calculate_portfolio_var(self, confidence_level=0.95, time_horizon=1):
         # Implement Value at Risk calculation
         pass
