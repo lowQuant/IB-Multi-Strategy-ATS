@@ -201,6 +201,8 @@ class Strategy:
         self.update_investment_status()
         orders = [o for o in self.strategy_manager.get_open_orders()]
         
+        last_run_date = None
+        
         while True:
             print(self.daily_data)
             latest_signal = self.daily_data['Signal'].iloc[-1]
