@@ -434,11 +434,11 @@ def get_index_sector_composition(source='yf' or 'universe',symbols=None,index='s
 if __name__ == "__main__":
     ib = connect_to_IB()
 
-    # start_date = get_last_full_trading_day()
-    # end_date = get_current_or_next_trading_day() + timedelta(days=4)
+    start_date = get_last_full_trading_day()
+    end_date = get_current_or_next_trading_day() + timedelta(days=1)
 
-    # earnings = get_earnings(start_date=start_date, end_date=end_date)
-    earnings = get_earnings()
+    earnings = get_earnings(start_date=start_date, end_date=end_date)
+    # earnings = get_earnings()
     symbols = earnings['symbol'].tolist()
 
     print(earnings)
@@ -446,7 +446,7 @@ if __name__ == "__main__":
     vol_df = get_vol_data(symbols,curated=False, include_yf=False)
     symbols = vol_df['act_symbol'].tolist()
     print(symbols)
-    # options_df = asyncio.run(get_filtered_put_options(ib, symbols, max_dte=25))
-    options_df = pea_oss(ib,symbols,max_dte=25)
+    options_df = asyncio.run(get_filtered_put_options(ib, symbols, max_dte=25))
+    # options_df = pea_oss(ib,symbols,max_dte=25)
     print(options_df)
     ib.disconnect()
