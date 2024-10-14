@@ -143,7 +143,10 @@ class RiskManager:
             contract = type(contract)(symbol=contract.symbol, exchange='SMART', currency=contract.currency)
             bars = self.ib.reqHistoricalData(contract, endDateTime='', durationStr=duration,
                                         barSizeSetting=bar_size, whatToShow='ADJUSTED_LAST', useRTH=True)
-
+        if isinstance(contract, Option):
+            contract = type(contract)(symbol=contract.symbol, exchange='SMART', currency=contract.currency)
+            bars = self.ib.reqHistoricalData(contract, endDateTime='', durationStr=duration,
+                                    barSizeSetting=bar_size, whatToShow='ADJUSTED_LAST', useRTH=True)
         return pd.DataFrame(bars)
 
     def calculate_position_correlations(self):
@@ -200,6 +203,7 @@ class RiskManager:
         
         concentration = portfolio_analysis.groupby('Character')['% of Portfolio'].sum()
         print(f"Portfolio concentration by asset class: {concentration}")
+        print(portfolio_analysis)
         return portfolio_analysis, concentration
 
     def visualize_portfolio_character(self):
@@ -223,6 +227,6 @@ class RiskManager:
 
 if __name__ == "__main__":
     ib_client = IB()
-    ib_client.connect('127.0.0.1', 7497, clientId=1)
+    ib_client.connect('127.0.0.1', 7497, clientId=2)
     risk_manager = RiskManager(ib_client)
     risk_manager.visualize_portfolio_character()
