@@ -1,6 +1,6 @@
 # IB_Multi_Strategy_ATS/broker/utilityfunctions.py
 
-import requests, pytz, math
+import requests, pytz, math, logging
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
@@ -295,7 +295,6 @@ async def process_get_filtered_put_options(ib, symbol, min_dte=0, max_dte=60, fi
         
         # Request market data
         tickers = await ib.reqTickersAsync(*contracts)
-        
         # Create DataFrame
         data = []
         for ticker in tickers:
@@ -312,7 +311,7 @@ async def process_get_filtered_put_options(ib, symbol, min_dte=0, max_dte=60, fi
                 'BidSize': ticker.bidSize,
                 'Ask': ticker.ask,
                 'AskSize': ticker.askSize,
-                'Last': ticker.last,
+                'Last': ticker.close,
                 'Contract': contract})
         
         df = pd.DataFrame(data)
@@ -353,18 +352,55 @@ async def get_filtered_put_options(ib, symbols, min_dte=0, max_dte=60, filtered=
     else:
         print("No valid data for any symbols")
         return pd.DataFrame()
-    
-def connect_to_IB(port=7497, clientid=2, symbol=None):
+class CustomFilter(logging.Filter):
+    def __init__(self):
+        super().__init__()
+        self.ignore_messages = [
+            "Unknown contract",
+            "Es wurde keine Wertpapierdefinition zu der Anfrage gefunden"
+        ]
+
+    def filter(self, record):
+        return not any(ignore_msg in record.getMessage() for ignore_msg in self.ignore_messages)
+
+class CustomIB(IB):
+    def __init__(self):
+        super().__init__()
+        # Configure logging
+        logger = logging.getLogger()
+        logger.setLevel(logging.ERROR)  # Set to ERROR level
+        
+        # Remove all existing handlers
+        for handler in logger.handlers[:]:
+            logger.removeHandler(handler)
+        
+        # Create a new handler with our custom filter
+        handler = logging.StreamHandler()
+        handler.addFilter(CustomFilter())
+        logger.addHandler(handler)
+
+    def error(self, reqId, errorCode, errorString, contract):
+        # List of error codes to ignore
+        ignore_codes = [200]
+        
+        # Check if the error should be ignored
+        if errorCode in ignore_codes:
+            return  # Silently ignore the error
+        
+        # For all other errors, call the parent class error method
+        super().error(reqId, errorCode, errorString, contract)
+
+def connect_to_IB(port=7497, clientid=91, symbol=None):
     util.startLoop()  # Needed in script mode
-    ib = IB()
+    ib = CustomIB()
     try:
         ib.connect('127.0.0.1', port, clientId=clientid)
     except ConnectionError:
         ib = None  # Reset ib on failure
     return ib
 
-def pea_oss(ib,symbols,max_dte=50):
-    options_df = asyncio.run(get_filtered_put_options(ib, symbols, max_dte))
+def pea_oss(ib,symbols,max_dte=60):
+    options_df = asyncio.run(get_filtered_put_options(ib, symbols, max_dte=max_dte))
     options_df['Premium'] = np.where(options_df['Bid'] == -1.0,
                                      options_df['Last'] / options_df['Strike'],
                                      options_df['Bid'] / options_df['Strike'])
@@ -434,19 +470,17 @@ def get_index_sector_composition(source='yf' or 'universe',symbols=None,index='s
 if __name__ == "__main__":
     ib = connect_to_IB()
 
-    # start_date = get_last_full_trading_day()
-    # end_date = get_current_or_next_trading_day() + timedelta(days=4)
+    start_date = get_last_full_trading_day()
+    end_date = get_current_or_next_trading_day() + timedelta(days=1)
 
-    # earnings = get_earnings(start_date=start_date, end_date=end_date)
-    earnings = get_earnings()
+    earnings = get_earnings(start_date=start_date, end_date=end_date)
+    # earnings = get_earnings()
     symbols = earnings['symbol'].tolist()
-
-    print(earnings)
 
     vol_df = get_vol_data(symbols,curated=False, include_yf=False)
     symbols = vol_df['act_symbol'].tolist()
     print(symbols)
-    # options_df = asyncio.run(get_filtered_put_options(ib, symbols, max_dte=25))
-    options_df = pea_oss(ib,symbols,max_dte=25)
+    
+    options_df = pea_oss(ib,symbols)
     print(options_df)
     ib.disconnect()
